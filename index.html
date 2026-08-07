@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poker Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f0f1e; color: #e0e0e0; min-height: 100vh; }
+
+    .screen { display: none; min-height: 100vh; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    .top-bar { background: #1a1a2e; padding: 14px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #2a2a4a; position: sticky; top: 0; z-index: 10; }
+    .top-bar h2 { font-size: 1.05rem; color: #f0c040; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .back-btn { background: transparent; border: none; color: #f0c040; font-size: 1.2rem; cursor: pointer; padding: 4px 8px; border-radius: 6px; flex-shrink: 0; }
+    .back-btn:hover { background: rgba(240,192,64,0.1); }
+    .content { flex: 1; padding: 20px 16px; max-width: 560px; width: 100%; margin: 0 auto; padding-bottom: 24px; }
+
+    /* Auth */
+    .auth-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px 16px; }
+    .auth-logo { font-size: 3rem; margin-bottom: 6px; text-align: center; }
+    .auth-title { font-size: 1.8rem; color: #f0c040; text-align: center; margin-bottom: 4px; }
+    .auth-sub { color: #666; font-size: 0.85rem; text-align: center; margin-bottom: 32px; }
+    .auth-card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 16px; padding: 28px 24px; width: 100%; max-width: 380px; }
+    .auth-tabs { display: flex; background: #0f0f1e; border-radius: 10px; padding: 4px; margin-bottom: 22px; }
+    .auth-tab { flex: 1; padding: 8px; text-align: center; cursor: pointer; border-radius: 8px; font-size: 0.88rem; font-weight: 500; color: #666; border: none; background: transparent; transition: all 0.2s; }
+    .auth-tab.active { background: #f0c040; color: #0f0f1e; }
+
+    /* Forms */
+    .fg { margin-bottom: 16px; }
+    .fg label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .fg input, .fg select { width: 100%; padding: 11px 14px; background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 10px; color: #e0e0e0; font-size: 0.92rem; outline: none; transition: border-color 0.2s; }
+    .fg input:focus, .fg select:focus { border-color: #f0c040; }
+    .fg input::placeholder { color: #444; }
+
+    /* Buttons */
+    .btn { padding: 11px 18px; border: none; border-radius: 10px; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-primary { background: #f0c040; color: #0f0f1e; width: 100%; }
+    .btn-primary:hover { background: #f5d060; }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-outline { background: transparent; border: 1px solid #2a2a4a; color: #ccc; }
+    .btn-outline:hover { border-color: #f0c040; color: #f0c040; }
+    .btn-danger { background: transparent; border: 1px solid #c0392b; color: #c0392b; }
+    .btn-danger:hover { background: #c0392b; color: #fff; }
+    .btn-success { background: #27ae60; color: #fff; width: 100%; }
+    .btn-success:hover { background: #2ecc71; }
+    .btn-sm { padding: 6px 13px; font-size: 0.78rem; }
+    .btn-icon { width: 32px; height: 32px; border-radius: 50%; padding: 0; font-size: 1rem; flex-shrink: 0; }
+    .btn-rebuy { padding: 6px 14px; background: rgba(231,76,60,0.12); border: 1px solid rgba(231,76,60,0.3); color: #e74c3c; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .btn-rebuy:hover { background: rgba(231,76,60,0.22); }
+
+    /* Cards */
+    .card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+    .card-click { cursor: pointer; transition: border-color 0.2s, transform 0.12s; }
+    .card-click:hover { border-color: #f0c040; transform: translateY(-1px); }
+
+    .batch-title { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+    .batch-meta { font-size: 0.78rem; color: #888; }
+    .badge { font-size: 0.68rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+    .badge-admin { background: rgba(240,192,64,0.12); color: #f0c040; }
+    .badge-member { background: rgba(130,100,200,0.12); color: #a090dd; }
+
+    /* Player row */
+    .player-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #2a2a4a; }
+    .player-row:last-child { border-bottom: none; }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; background: #2a2a4a; display: flex; align-items: center; justify-content: center; font-size: 0.95rem; font-weight: 700; color: #f0c040; flex-shrink: 0; }
+    .p-info { flex: 1; min-width: 0; }
+    .p-name { font-size: 0.92rem; font-weight: 500; }
+    .p-sub { font-size: 0.75rem; color: #888; margin-top: 2px; }
+
+    /* Game player card */
+    .gpc { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .gpc.me { border-color: #4a4a8a; }
+    .gpc.cashed-out { border-color: rgba(39,174,96,0.4); opacity: 0.75; }
+    .gpc-pots { text-align: center; min-width: 52px; }
+    .gpc-pots-num { font-size: 1.6rem; font-weight: 700; color: #f0c040; line-height: 1; }
+    .gpc-pots-lbl { font-size: 0.65rem; color: #888; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 2px; }
+    .gpc-spent { font-size: 0.78rem; color: #e74c3c; font-weight: 600; margin-top: 2px; }
+
+    /* Stats */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .stats-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .stat-card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 14px; text-align: center; }
+    .stat-val { font-size: 1.3rem; font-weight: 700; color: #f0c040; margin-bottom: 3px; }
+    .stat-lbl { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Results table */
+    .rtbl { width: 100%; border-collapse: collapse; }
+    .rtbl th { color: #888; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.4px; padding: 8px 10px; text-align: left; border-bottom: 1px solid #2a2a4a; }
+    .rtbl td { padding: 11px 10px; font-size: 0.88rem; border-bottom: 1px solid #1a1a30; }
+    .rtbl tr:last-child td { border-bottom: none; }
+    .pos { color: #27ae60; font-weight: 700; }
+    .neg { color: #e74c3c; font-weight: 700; }
+    .zero { color: #888; }
+
+    /* Settlement */
+    .settle-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #0f0f1e; border-radius: 10px; margin-bottom: 8px; font-size: 0.88rem; flex-wrap: wrap; }
+
+    /* Game history card */
+    .ghc { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 13px 15px; margin-bottom: 9px; cursor: pointer; transition: border-color 0.2s; }
+    .ghc:hover { border-color: #4a4a8a; }
+    .ghc-info { font-size: 0.8rem; color: #9090cc; margin-top: 4px; }
+
+    /* Leaderboard */
+    .lb-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; margin-bottom: 8px; }
+    .lb-row.lb-top { border-color: #f0c040; background: linear-gradient(135deg, #1a1a2e 0%, #2a2010 100%); }
+    .lb-rank { font-size: 1.5rem; width: 34px; text-align: center; flex-shrink: 0; line-height: 1; }
+    .lb-rank-num { font-size: 0.9rem; font-weight: 700; color: #666; width: 34px; text-align: center; flex-shrink: 0; }
+    .lb-info { flex: 1; min-width: 0; }
+    .lb-name { font-size: 0.95rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lb-sub { font-size: 0.72rem; color: #888; margin-top: 3px; }
+    .lb-bar-wrap { height: 3px; background: #2a2a4a; border-radius: 2px; margin-top: 5px; }
+    .lb-bar { height: 3px; border-radius: 2px; }
+    .lb-net { font-size: 1.05rem; font-weight: 700; text-align: right; flex-shrink: 0; min-width: 60px; }
+
+    /* Active game banner */
+    .agb { background: rgba(39,174,96,0.08); border: 1px solid rgba(39,174,96,0.25); border-radius: 12px; padding: 12px 15px; margin-bottom: 12px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: border-color 0.2s; }
+    .agb:hover { border-color: #27ae60; }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #27ae60; margin-right: 10px; flex-shrink: 0; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+    .sh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; margin-top: 4px; }
+    .sh-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.8px; color: #888; }
+
+    .chip-label { display: inline-flex; align-items: center; background: rgba(240,192,64,0.08); border: 1px solid rgba(240,192,64,0.18); border-radius: 12px; padding: 4px 10px; font-size: 0.78rem; color: #f0c040; margin-bottom: 8px; margin-right: 6px; }
+
+    /* Info box */
+    .info-box { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #888; margin-bottom: 16px; line-height: 1.6; }
+    .info-box strong { color: #e0e0e0; }
+
+    /* FAB */
+    .fab { position: fixed; bottom: 24px; right: 20px; width: 54px; height: 54px; border-radius: 50%; background: #f0c040; color: #0f0f1e; border: none; font-size: 1.5rem; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; transition: all 0.2s; z-index: 50; }
+    .fab.show { display: flex; }
+    .fab:hover { background: #f5d060; transform: scale(1.07); }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: #27ae60; color: #fff; padding: 9px 20px; border-radius: 20px; font-size: 0.86rem; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none; white-space: nowrap; z-index: 1000; }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.err { background: #c0392b; }
+
+    /* Modal */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; display: none; align-items: flex-end; justify-content: center; }
+    .modal-bg.open { display: flex; }
+    .modal { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 20px 20px 0 0; padding: 24px 20px 32px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
+    .modal-title { font-size: 1rem; font-weight: 600; color: #f0c040; margin-bottom: 6px; }
+    .modal-sub { font-size: 0.78rem; color: #888; margin-bottom: 20px; line-height: 1.5; }
+    .modal-row { display: flex; gap: 10px; margin-top: 18px; }
+    .modal-row .btn { flex: 1; }
+
+    /* End game per-player chip input */
+    .eg-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #2a2a4a; }
+    .eg-row:last-child { border-bottom: none; }
+    .eg-name { flex: 1; font-size: 0.9rem; font-weight: 500; }
+    .eg-invested { font-size: 0.75rem; color: #e74c3c; }
+    .eg-input { width: 110px; padding: 8px 12px; background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 8px; color: #e0e0e0; font-size: 0.9rem; outline: none; text-align: right; flex-shrink: 0; }
+    .eg-input:focus { border-color: #f0c040; }
+
+    .div { height: 1px; background: #2a2a4a; margin: 16px 0; }
+    .empty { text-align: center; padding: 40px 16px; color: #555; }
+    .empty-icon { font-size: 2.4rem; margin-bottom: 10px; }
+    .empty p { font-size: 0.88rem; line-height: 1.6; }
+    .player-check { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #2a2a4a; cursor: pointer; }
+    .player-check:last-child { border-bottom: none; }
+    .player-check input[type=checkbox] { width: 17px; height: 17px; accent-color: #f0c040; cursor: pointer; }
+
+    /* Dashboard hero */
+    .dash-hero { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%); border: 1px solid #2a2a4a; border-radius: 18px; padding: 20px 18px 18px; margin-bottom: 18px; position: relative; overflow: hidden; }
+    .dash-hero::before { content: '♠♥♦♣'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); font-size: 4.5rem; opacity: 0.04; letter-spacing: -4px; pointer-events: none; }
+    .dash-greeting { font-size: 0.78rem; color: #888; margin-bottom: 3px; }
+    .dash-name { font-size: 1.45rem; font-weight: 700; color: #f0c040; margin-bottom: 14px; }
+    .dash-stats { display: flex; gap: 0; }
+    .dash-stat { flex: 1; text-align: center; }
+    .dash-stat + .dash-stat { border-left: 1px solid #2a2a4a; }
+    .dash-stat-val { font-size: 1.25rem; font-weight: 700; color: #e0e0e0; }
+    .dash-stat-lbl { font-size: 0.65rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+    /* Batch cards */
+    .batch-card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 14px; padding: 0; margin-bottom: 10px; cursor: pointer; transition: border-color 0.2s, transform 0.12s; overflow: hidden; display: flex; align-items: stretch; }
+    .batch-card:hover { border-color: #f0c040; transform: translateY(-1px); }
+    .batch-card:active { transform: scale(0.99); }
+    .batch-card-accent { width: 5px; flex-shrink: 0; background: linear-gradient(180deg, #f0c040, #e08020); }
+    .batch-card-body { flex: 1; padding: 14px 14px 14px 16px; min-width: 0; }
+    .batch-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; gap: 8px; }
+    .batch-card-name { font-size: 1rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .batch-card-meta { font-size: 0.76rem; color: #888; margin-bottom: 4px; }
+    .batch-card-last { font-size: 0.73rem; color: #666; }
+    .batch-card-arrow { display: flex; align-items: center; padding-right: 14px; color: #3a3a5a; font-size: 1rem; flex-shrink: 0; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }
+
+    /* Mobile */
+    @media (max-width: 480px) {
+      .fg input, .fg select { font-size: 16px; } /* prevent iOS zoom */
+      .eg-input { font-size: 16px; }
+      .content { padding: 16px 14px; padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+      .fab { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+      .top-bar { padding: 12px 14px; }
+      .modal { padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+      .btn { min-height: 44px; }
+      .btn-sm { min-height: 36px; }
+      .back-btn { min-width: 40px; min-height: 40px; }
+      .stats-grid-3 .stat-card { padding: 10px 6px; }
+      .stats-grid-3 .stat-val { font-size: 1.05rem; }
+      .rtbl th, .rtbl td { padding: 9px 6px; font-size: 0.82rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== AUTH ===== -->
+<div id="s-auth" class="screen active">
+  <div class="auth-wrap">
+    <div class="auth-logo">🃏</div>
+    <div class="auth-title">Poker Tracker</div>
+    <p class="auth-sub">Track your weekly games</p>
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="authTab('login')">Login</button>
+        <button class="auth-tab" onclick="authTab('register')">Register</button>
+      </div>
+      <div id="f-login">
+        <div class="fg"><label>Username</label><input id="li-user" type="text" placeholder="your username" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()" /></div>
+        <div class="fg"><label>Password</label><input id="li-pass" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" /></div>
+        <button class="btn btn-primary" onclick="doLogin()">Login</button>
+      </div>
+      <div id="f-register" style="display:none">
+        <div class="fg"><label>Display Name</label><input id="rg-name" type="text" placeholder="Your name" /></div>
+        <div class="fg"><label>Username</label><input id="rg-user" type="text" placeholder="choose a username" autocomplete="username" /></div>
+        <div class="fg"><label>Password</label><input id="rg-pass" type="password" placeholder="min 4 characters" autocomplete="new-password" /></div>
+        <button class="btn btn-primary" onclick="doRegister()">Create Account</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DASHBOARD ===== -->
+<div id="s-dash" class="screen">
+  <div class="top-bar">
+    <h2>🃏 Poker Tracker</h2>
+    <button class="btn btn-sm btn-outline" onclick="doLogout()" style="padding:6px 12px;font-size:0.78rem">Sign out</button>
+  </div>
+  <div class="content" id="c-dash"></div>
+  <button class="fab show" id="fab" onclick="openModal('m-create-batch')" title="New Batch">+</button>
+</div>
+
+<!-- ===== BATCH ===== -->
+<div id="s-batch" class="screen">
+  <div class="top-bar">
+    <button class="back-btn" onclick="goBack()">←</button>
+    <h2 id="batch-title">Batch</h2>
+    <button id="btn-delete-batch" class="btn btn-sm btn-danger" style="display:none" onclick="deleteBatch()">Delete</button>
+    <button class="btn btn-sm btn-outline" onclick="goMonthly()">Monthly</button>
+  </div>
+  <div class="content" id="c-batch"></div>
+</div>
+
+<!-- ===== GAME ===== -->
+<div id="s-game" class="screen">
+  <div class="top-bar">
+    <button class="back-btn" onclick="goBack()">←</button>
+    <h2 id="game-title">Game</h2>
+  </div>
+  <div class="content" id="c-game"></div>
+</div>
+
+<!-- ===== RESULTS ===== -->
+<div id="s-results" class="screen">
+  <div class="top-bar"><button class="back-btn" onclick="goBack()">←</button><h2>Game Results</h2></div>
+  <div class="content" id="c-results"></div>
+</div>
+
+<!-- ===== MONTHLY ===== -->
+<div id="s-monthly" class="screen">
+  <div class="top-bar"><button class="back-btn" onclick="goBack()">←</button><h2>Monthly Summary</h2></div>
+  <div class="content" id="c-monthly"></div>
+</div>
+
+<!-- MODAL: Create Batch -->
+<div class="modal-bg" id="m-create-batch">
+  <div class="modal">
+    <div class="modal-title">Create New Batch</div>
+    <div class="modal-sub">You'll be added as admin. Add members after creating.</div>
+    <div class="fg"><label>Batch Name</label><input id="cb-name" type="text" placeholder="e.g. Friday Night Poker" maxlength="40" /></div>
+    <div class="modal-row">
+      <button class="btn btn-outline" onclick="closeModal('m-create-batch')">Cancel</button>
+      <button class="btn btn-primary" onclick="createBatch()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Add Member -->
+<div class="modal-bg" id="m-add-member">
+  <div class="modal">
+    <div class="modal-title">Add Players</div>
+
+    <div class="sh" style="margin-bottom:8px"><span class="sh-title">Registered Users</span></div>
+    <div class="fg" style="margin-bottom:8px"><input id="am-filter" type="text" placeholder="Filter by name or username..." oninput="filterRegUsers(this.value)" /></div>
+    <div id="am-reg-list" style="max-height:190px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:10px;padding:2px 12px;margin-bottom:4px"></div>
+
+    <div class="div"></div>
+
+    <div class="sh" style="margin-bottom:8px"><span class="sh-title">Guest Players (no account)</span></div>
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:4px">
+      <div class="fg" style="flex:1;margin-bottom:0"><label>How many guests?</label><input id="am-count" type="number" min="1" max="20" placeholder="e.g. 4" /></div>
+      <button class="btn btn-outline" style="margin-bottom:0;white-space:nowrap" onclick="setupBulkFields()">Set Up Fields</button>
+    </div>
+    <div id="am-bulk-rows" style="margin-top:8px"></div>
+
+    <div class="modal-row">
+      <button class="btn btn-outline" onclick="closeModal('m-add-member')">Cancel</button>
+      <button class="btn btn-primary" onclick="addAllPlayers()">Add All Players</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Start Game -->
+<div class="modal-bg" id="m-start-game">
+  <div class="modal">
+    <div class="modal-title">Start New Game</div>
+    <div class="modal-sub">Everyone starts with 1 pot. You can add rebuys during the game when someone busts.</div>
+    <div class="fg"><label>Date</label><input id="sg-date" type="date" /></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="fg"><label>Chips per Pot</label><input id="sg-chips" type="number" placeholder="e.g. 200" min="1" /></div>
+      <div class="fg"><label>₹ per Pot</label><input id="sg-rupees" type="number" placeholder="e.g. 20" min="1" /></div>
+    </div>
+    <div class="fg"><label>Players in this game</label><div id="sg-players"></div></div>
+    <div class="modal-row">
+      <button class="btn btn-outline" onclick="closeModal('m-start-game')">Cancel</button>
+      <button class="btn btn-primary" onclick="startGame()">Start Game</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: End Game — enter final chip counts -->
+<div class="modal-bg" id="m-end-game">
+  <div class="modal">
+    <div class="modal-title">End Game — Final Chip Count</div>
+    <div class="modal-sub" id="eg-sub"></div>
+    <div id="eg-rows"></div>
+    <div id="eg-balance" style="margin-top:14px;font-size:0.8rem;color:#888"></div>
+    <div class="modal-row">
+      <button class="btn btn-outline" onclick="closeModal('m-end-game')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitEndGame()">Calculate Results</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Add Player to Game -->
+<div class="modal-bg" id="m-add-to-game">
+  <div class="modal">
+    <div class="modal-title">Add Player to Game</div>
+    <div class="modal-sub">Add a batch member to the active game (starts with 1 pot). Or add a brand-new guest below.</div>
+    <div id="atg-list"></div>
+    <div class="div"></div>
+    <div class="fg"><label>Add new guest to batch &amp; game</label><input id="atg-guest" type="text" placeholder="Guest player name..." /></div>
+    <div class="modal-row">
+      <button class="btn btn-outline" onclick="closeModal('m-add-to-game')">Cancel</button>
+      <button class="btn btn-primary" onclick="addGuestToGame()">Add Guest</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Cash Out Player -->
+<div class="modal-bg" id="m-cashout">
+  <div class="modal">
+    <div class="modal-title">Player Cashing Out</div>
+    <div class="modal-sub" id="co-sub"></div>
+    <div id="co-info" style="margin-bottom:16px"></div>
+    <div class="fg"><label>Final Chip Count</label><input id="co-chips" type="number" min="0" placeholder="e.g. 350" /></div>
+    <div class="modal-row">
+      <button class="btn btn-outline" onclick="closeModal('m-cashout')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitCashOut()">Save &amp; Cash Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Previous Balance -->
+<div class="modal-bg" id="m-prev-balance">
+  <div class="modal">
+    <div class="modal-title">Previous Balance</div>
+    <div class="modal-sub">Carry-over amount for this player from outside tracked games.<br>Positive = they are owed money · Negative = they owe money.</div>
+    <div class="fg"><label>Balance (₹)</label><input id="pb-amount" type="number" placeholder="e.g. -500 or 200" /></div>
+    <input type="hidden" id="pb-member-id" />
+    <div class="modal-row">
+      <button class="btn btn-outline" onclick="closeModal('m-prev-balance')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePrevBalance()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const DB = {
+  users:   { get: () => JSON.parse(localStorage.getItem('pt_users')   || '[]'),   set: v => localStorage.setItem('pt_users',   JSON.stringify(v)) },
+  session: { get: () => JSON.parse(localStorage.getItem('pt_sess')    || 'null'), set: v => v ? localStorage.setItem('pt_sess', JSON.stringify(v)) : localStorage.removeItem('pt_sess') },
+  batches: { get: () => JSON.parse(localStorage.getItem('pt_batches') || '[]'),   set: v => localStorage.setItem('pt_batches', JSON.stringify(v)) },
+  games:   { get: () => JSON.parse(localStorage.getItem('pt_games')   || '[]'),   set: v => localStorage.setItem('pt_games',   JSON.stringify(v)) },
+};
+
+let S = { session: null, batchId: null, gameId: null, stack: [] };
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+function toast(msg, err = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = err ? 'err' : '';
+  t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500);
+}
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function fmtDate(s) {
+  if (!s) return '';
+  return new Date(s + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+function today() { return new Date().toISOString().split('T')[0]; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// chips → rupees
+function chipsToRupees(chips, game) {
+  return Math.round(chips * (game.rupeesPerPot / game.chipsPerPot));
+}
+
+// ===== NAVIGATION =====
+function go(id, push = true) {
+  if (push) S.stack.push(id);
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById('fab').classList.toggle('show', id === 's-dash');
+}
+function goBack() {
+  S.stack.pop();
+  const prev = S.stack[S.stack.length - 1] || 's-dash';
+  go(prev, false);
+  if (prev === 's-dash')    renderDash();
+  if (prev === 's-batch')   renderBatch();
+  if (prev === 's-game')    renderGame();
+  if (prev === 's-monthly') renderMonthly();
+}
+function navToBatch() {
+  while (S.stack.length > 0 && S.stack[S.stack.length - 1] !== 's-batch') S.stack.pop();
+  if (!S.stack.length) S.stack = ['s-dash', 's-batch'];
+  go('s-batch', false); renderBatch();
+}
+
+// ===== AUTH =====
+function authTab(t) {
+  document.querySelectorAll('.auth-tab').forEach((el, i) => el.classList.toggle('active', (i === 0) === (t === 'login')));
+  document.getElementById('f-login').style.display    = t === 'login'    ? '' : 'none';
+  document.getElementById('f-register').style.display = t === 'register' ? '' : 'none';
+}
+function doLogin() {
+  const username = document.getElementById('li-user').value.trim().toLowerCase();
+  const password = document.getElementById('li-pass').value;
+  if (!username || !password) { toast('Enter username and password', true); return; }
+  const user = DB.users.get().find(u => u.username === username && u.password === password);
+  if (!user) { toast('Invalid username or password', true); return; }
+  S.session = { id: user.id, name: user.name, username: user.username };
+  DB.session.set(S.session); S.stack = ['s-dash']; renderDash(); go('s-dash', false);
+  toast(`Welcome back, ${user.name}!`);
+}
+function doRegister() {
+  const name = document.getElementById('rg-name').value.trim();
+  const username = document.getElementById('rg-user').value.trim().toLowerCase();
+  const password = document.getElementById('rg-pass').value;
+  if (!name || !username || !password) { toast('Fill in all fields', true); return; }
+  if (username.length < 3) { toast('Username min 3 chars', true); return; }
+  if (password.length < 4) { toast('Password min 4 chars', true); return; }
+  const users = DB.users.get();
+  if (users.some(u => u.name.toLowerCase() === name.toLowerCase())) { toast('Name already taken, please choose a different name', true); return; }
+  if (users.some(u => u.username === username)) { toast('Username already taken', true); return; }
+  const u = { id: 'u' + uid(), name, username, password, at: Date.now() };
+  users.push(u); DB.users.set(users);
+  S.session = { id: u.id, name: u.name, username: u.username };
+  DB.session.set(S.session); S.stack = ['s-dash']; renderDash(); go('s-dash', false);
+  toast(`Welcome, ${name}!`);
+}
+function doLogout() {
+  DB.session.set(null); S = { session: null, batchId: null, gameId: null, stack: [] };
+  go('s-auth', false);
+}
+
+// ===== DASHBOARD =====
+function renderDash() {
+  const batches = DB.batches.get(), games = DB.games.get(), myId = S.session.id;
+  const mine   = batches.filter(b => b.adminId === myId || b.members.some(m => m.id === myId));
+  const active = games.filter(g => g.status === 'active' && mine.some(b => b.id === g.batchId));
+  const done   = games.filter(g => g.status === 'completed' && mine.some(b => b.id === g.batchId));
+
+  const hour = new Date().getHours();
+  const timeGreet = hour < 12 ? 'Good morning ☀️' : hour < 17 ? 'Good afternoon 🌤️' : 'Good evening 🌙';
+
+  // overall net across all completed games
+  let totalNet = 0;
+  done.forEach(g => { if (g.results) { const r = g.results.find(r => r.id === myId); if (r) totalNet += r.net; } });
+  const netColor = totalNet > 0 ? '#27ae60' : totalNet < 0 ? '#e74c3c' : '#888';
+  const netText  = `${totalNet > 0 ? '+' : ''}₹${totalNet}`;
+
+  let h = `<div class="dash-hero">
+    <div class="dash-greeting">${timeGreet}</div>
+    <div class="dash-name">${esc(S.session.name)}</div>
+    <div class="dash-stats">
+      <div class="dash-stat"><div class="dash-stat-val">${mine.length}</div><div class="dash-stat-lbl">Batches</div></div>
+      <div class="dash-stat"><div class="dash-stat-val">${done.length}</div><div class="dash-stat-lbl">Games</div></div>
+      <div class="dash-stat"><div class="dash-stat-val" style="color:${netColor}">${netText}</div><div class="dash-stat-lbl">All-time Net</div></div>
+    </div>
+  </div>`;
+
+  if (active.length) {
+    const ag = active[0], b = batches.find(x => x.id === ag.batchId);
+    const totalRebuys = ag.players.reduce((s, p) => s + (p.pots - 1), 0);
+    h += `<div class="agb" onclick="openGame('${ag.id}')">
+      <div style="display:flex;align-items:center"><div class="pulse-dot"></div>
+        <div><div style="font-size:0.9rem;font-weight:600">Active Game</div>
+        <div style="font-size:0.76rem;color:#888">${b ? esc(b.name) : ''} · ${fmtDate(ag.date)} · ${ag.players.length} players${totalRebuys > 0 ? ` · ${totalRebuys} rebuy${totalRebuys !== 1 ? 's' : ''}` : ''}</div></div>
+      </div><span style="color:#27ae60;font-size:0.82rem">Open →</span>
+    </div>`;
+  }
+
+  h += `<div class="sh" style="margin-top:4px"><span class="sh-title">My Batches</span></div>`;
+  if (!mine.length) {
+    h += `<div class="empty"><div class="empty-icon">🃏</div><p>No batches yet.<br>Tap <strong>+</strong> to create your first batch.</p></div>`;
+  } else {
+    mine.forEach(b => {
+      const isAdmin  = b.adminId === myId;
+      const bGames   = games.filter(g => g.batchId === b.id && g.status === 'completed');
+      const gc       = games.filter(g => g.batchId === b.id).length;
+      const lastGame = bGames.sort((a, x) => x.date.localeCompare(a.date))[0];
+      const lastTxt  = lastGame ? `Last played ${fmtDate(lastGame.date)}` : 'No games yet';
+      // user's net in this batch
+      let bNet = 0;
+      bGames.forEach(g => { if (g.results) { const r = g.results.find(r => r.id === myId); if (r) bNet += r.net; } });
+      const bNetStr  = bGames.length ? `<span style="color:${bNet>0?'#27ae60':bNet<0?'#e74c3c':'#888'};font-weight:700">${bNet>0?'+':''}₹${bNet}</span>` : '';
+      h += `<div class="batch-card" onclick="openBatch('${b.id}')">
+        <div class="batch-card-accent"></div>
+        <div class="batch-card-body">
+          <div class="batch-card-top">
+            <div class="batch-card-name">${esc(b.name)}</div>
+            <span class="badge ${isAdmin ? 'badge-admin' : 'badge-member'}">${isAdmin ? 'Admin' : 'Member'}</span>
+          </div>
+          <div class="batch-card-meta">${b.members.length} player${b.members.length!==1?'s':''} · ${gc} game${gc!==1?'s':''} ${bNetStr}</div>
+          <div class="batch-card-last">${lastTxt}</div>
+        </div>
+        <div class="batch-card-arrow">›</div>
+      </div>`;
+    });
+  }
+  document.getElementById('c-dash').innerHTML = h;
+}
+
+// ===== BATCH =====
+function openBatch(id) {
+  S.batchId = id; renderBatch(); S.stack.push('s-batch'); go('s-batch', false);
+}
+function renderBatch() {
+  const batches = DB.batches.get(), games = DB.games.get();
+  const b = batches.find(x => x.id === S.batchId);
+  if (!b) return;
+  const isAdmin  = b.adminId === S.session.id;
+  const isEditor = !isAdmin && (b.editors || []).includes(S.session.id);
+  const canEdit  = isAdmin || isEditor;
+  const bGames   = games.filter(g => g.batchId === S.batchId).sort((a, x) => x.date.localeCompare(a.date));
+  const ag       = bGames.find(g => g.status === 'active');
+  const done     = bGames.filter(g => g.status === 'completed');
+  document.getElementById('batch-title').textContent = b.name;
+  document.getElementById('btn-delete-batch').style.display = isAdmin ? '' : 'none';
+
+  let h = `<div class="sh"><span class="sh-title">Players (${b.members.length})</span>
+    ${canEdit ? `<button class="btn btn-sm btn-outline" onclick="openAddMember()">+ Add</button>` : ''}
+  </div><div class="card" style="padding:4px 16px">`;
+  b.members.forEach(m => {
+    const isMe     = m.id === S.session.id, isAdm = m.id === b.adminId;
+    const hasAccess = !isAdm && (b.editors || []).includes(m.id);
+    const prevBal  = m.prevBalance || 0;
+    h += `<div class="player-row">
+      <div class="avatar">${m.name[0].toUpperCase()}</div>
+      <div class="p-info">
+        <div class="p-name">${esc(m.name)}${isMe ? ' <span style="font-size:0.7rem;color:#7070aa">(you)</span>' : ''}</div>
+        ${isAdm ? '<div class="p-sub">Admin</div>' : ''}
+        ${hasAccess ? '<div class="p-sub" style="color:#f0c040">Editor</div>' : ''}
+        ${prevBal !== 0 ? `<div class="p-sub" style="color:${prevBal>0?'#27ae60':'#e74c3c'}">${prevBal>0?'+':''}₹${prevBal} prev. balance</div>` : ''}
+      </div>
+      ${isAdmin && !isAdm ? `<button class="btn btn-sm ${hasAccess ? 'btn-danger' : 'btn-outline'}" onclick="${hasAccess ? 'revokeAccess' : 'grantAccess'}('${m.id}')" style="font-size:0.7rem;padding:4px 8px;margin-right:4px">${hasAccess ? 'Revoke' : '+ Access'}</button>` : ''}
+      ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="openPrevBalance('${m.id}')" style="font-size:0.7rem;padding:4px 8px;margin-right:4px">₹ Bal</button>` : ''}
+      ${isAdmin && !isMe ? `<button class="btn btn-sm btn-danger btn-icon" onclick="removeMember('${m.id}')">×</button>` : ''}
+    </div>`;
+  });
+  h += '</div><div style="margin-top:20px">';
+
+  if (ag) {
+    const totalPots  = ag.players.reduce((s, p) => s + p.pots, 0);
+    const totalSpent = totalPots * ag.rupeesPerPot;
+    h += `<div class="sh"><span class="sh-title">Active Game</span></div>
+    <div class="agb" onclick="openGame('${ag.id}')">
+      <div style="display:flex;align-items:center"><div class="pulse-dot"></div>
+        <div><div style="font-size:0.9rem;font-weight:600">${fmtDate(ag.date)}</div>
+        <div style="font-size:0.76rem;color:#888">${ag.chipsPerPot} chips/pot · ₹${ag.rupeesPerPot}/pot · ₹${totalSpent} in play</div></div>
+      </div><span style="color:#27ae60;font-size:0.82rem">Open →</span>
+    </div>`;
+  } else if (canEdit) {
+    h += `<button class="btn btn-success" onclick="openStartGame()">▶ Start New Game</button>`;
+  }
+  h += '</div>';
+
+  if (done.length) {
+    h += `<div style="margin-top:24px"><div class="sh"><span class="sh-title">Game History (${done.length})</span></div>`;
+    done.forEach(g => {
+      const win = g.results ? [...g.results].sort((a, x) => x.net - a.net)[0] : null;
+      const totalPots = g.players.reduce((s, p) => s + p.pots, 0);
+      h += `<div class="ghc" onclick="openResults('${g.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:0.88rem;font-weight:500">${fmtDate(g.date)}</div>
+          <span style="font-size:0.75rem;color:#9090cc">View →</span>
+        </div>
+        <div class="ghc-info">${g.chipsPerPot} chips/pot · ₹${g.rupeesPerPot}/pot · ${totalPots} pots total${win ? ` · 🏆 ${esc(win.name)} (+₹${win.net})` : ''}</div>
+      </div>`;
+    });
+    h += '</div>';
+  }
+  document.getElementById('c-batch').innerHTML = h;
+}
+
+// ===== MEMBERS =====
+function openAddMember() {
+  document.getElementById('am-filter').value        = '';
+  document.getElementById('am-count').value         = '';
+  document.getElementById('am-bulk-rows').innerHTML = '';
+  renderRegUsersList('');
+  openModal('m-add-member');
+}
+function filterRegUsers(q) { renderRegUsersList(q); }
+function renderRegUsersList(filter) {
+  const b       = DB.batches.get().find(x => x.id === S.batchId);
+  const inBatch = b ? b.members.map(m => m.id) : [];
+  const q       = (filter || '').trim().toLowerCase();
+  const users   = DB.users.get().filter(u =>
+    !inBatch.includes(u.id) &&
+    (!q || u.name.toLowerCase().includes(q) || u.username.includes(q))
+  );
+  const el = document.getElementById('am-reg-list');
+  if (!users.length) {
+    el.innerHTML = `<p style="font-size:0.8rem;color:#555;padding:10px 0;text-align:center">${q ? 'No users match.' : 'No registered users to add.'}</p>`;
+    return;
+  }
+  el.innerHTML = users.map(u => `
+    <label class="player-check">
+      <input type="checkbox" class="reg-user-cb" value="${u.id}" data-name="${esc(u.name)}" />
+      <div>
+        <div style="font-size:0.88rem;font-weight:500">${esc(u.name)}</div>
+        <div style="font-size:0.75rem;color:#888">@${u.username}</div>
+      </div>
+    </label>`).join('');
+}
+function setupBulkFields() {
+  const count = parseInt(document.getElementById('am-count').value);
+  if (!count || count < 1 || count > 20) { toast('Enter a number between 1 and 20', true); return; }
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    html += `<div class="fg" style="margin-bottom:8px">
+      <label>Guest ${i + 1} name</label>
+      <input class="bulk-name" type="text" placeholder="Guest name..." style="width:100%;padding:10px 14px;background:#0f0f1e;border:1px solid #2a2a4a;border-radius:10px;color:#e0e0e0;font-size:0.92rem;outline:none" />
+    </div>`;
+  }
+  document.getElementById('am-bulk-rows').innerHTML = html;
+  const first = document.querySelector('.bulk-name');
+  if (first) first.focus();
+}
+function addAllPlayers() {
+  const batches = DB.batches.get();
+  const bi      = batches.findIndex(b => b.id === S.batchId);
+  if (bi === -1) return;
+  let total = 0;
+  // Add checked registered users
+  [...document.querySelectorAll('.reg-user-cb:checked')].forEach(cb => {
+    if (!batches[bi].members.some(m => m.id === cb.value)) {
+      batches[bi].members.push({ id: cb.value, name: cb.dataset.name, guest: false });
+      total++;
+    }
+  });
+  // Add filled guest names
+  [...document.querySelectorAll('.bulk-name')].map(i => i.value.trim()).filter(n => n).forEach(name => {
+    batches[bi].members.push({ id: 'g' + uid(), name, guest: true });
+    total++;
+  });
+  if (!total) { toast('Check users or enter guest names', true); return; }
+  DB.batches.set(batches);
+  closeModal('m-add-member');
+  renderBatch();
+  toast(`${total} player${total !== 1 ? 's' : ''} added!`);
+}
+
+// ===== ACCESS CONTROL =====
+function grantAccess(memberId) {
+  const batches = DB.batches.get();
+  const bi = batches.findIndex(b => b.id === S.batchId);
+  if (bi === -1) return;
+  if (!batches[bi].editors) batches[bi].editors = [];
+  if (!batches[bi].editors.includes(memberId)) batches[bi].editors.push(memberId);
+  DB.batches.set(batches);
+  renderBatch();
+  toast('Editor access granted!');
+}
+function revokeAccess(memberId) {
+  const batches = DB.batches.get();
+  const bi = batches.findIndex(b => b.id === S.batchId);
+  if (bi === -1) return;
+  batches[bi].editors = (batches[bi].editors || []).filter(id => id !== memberId);
+  DB.batches.set(batches);
+  renderBatch();
+  toast('Editor access revoked.');
+}
+
+function addRegistered(userId, userName) {
+  const batches = DB.batches.get();
+  const i = batches.findIndex(b => b.id === S.batchId);
+  if (batches[i].members.some(m => m.id === userId)) { toast('Already in batch', true); return; }
+  batches[i].members.push({ id: userId, name: userName, guest: false });
+  DB.batches.set(batches); closeModal('m-add-member'); renderBatch();
+  toast(`${userName} added!`);
+}
+function addGuest() {
+  const name = document.getElementById('am-guest').value.trim();
+  if (!name) { toast('Enter guest name', true); return; }
+  const batches = DB.batches.get();
+  const i = batches.findIndex(b => b.id === S.batchId);
+  batches[i].members.push({ id: 'g' + uid(), name, guest: true });
+  DB.batches.set(batches); closeModal('m-add-member'); renderBatch();
+  toast(`${name} added!`);
+}
+function removeMember(memberId) {
+  if (!confirm('Remove this member?')) return;
+  const batches = DB.batches.get();
+  const i = batches.findIndex(b => b.id === S.batchId);
+  batches[i].members = batches[i].members.filter(m => m.id !== memberId);
+  DB.batches.set(batches); renderBatch(); toast('Member removed.');
+}
+function deleteBatch() {
+  if (!confirm('Delete this batch and all its game history? This cannot be undone.')) return;
+  DB.batches.set(DB.batches.get().filter(b => b.id !== S.batchId));
+  DB.games.set(DB.games.get().filter(g => g.batchId !== S.batchId));
+  goBack(); renderDash(); toast('Batch deleted.');
+}
+
+// ===== START GAME =====
+function openStartGame() {
+  const b = DB.batches.get().find(x => x.id === S.batchId);
+  if (!b) return;
+  document.getElementById('sg-date').value   = today();
+  document.getElementById('sg-chips').value  = '';
+  document.getElementById('sg-rupees').value = '';
+  document.getElementById('sg-players').innerHTML = b.members.map(m => `
+    <label class="player-check">
+      <input type="checkbox" value="${m.id}" data-name="${esc(m.name)}" checked />
+      <span style="font-size:0.9rem">${esc(m.name)}</span>
+    </label>`).join('');
+  openModal('m-start-game');
+}
+function startGame() {
+  const date   = document.getElementById('sg-date').value;
+  const chips  = parseFloat(document.getElementById('sg-chips').value);
+  const rupees = parseFloat(document.getElementById('sg-rupees').value);
+  if (!date)               { toast('Select a date', true); return; }
+  if (!chips  || chips<=0) { toast('Enter chips per pot', true); return; }
+  if (!rupees || rupees<=0){ toast('Enter ₹ per pot', true); return; }
+  const checked = [...document.querySelectorAll('#sg-players input:checked')];
+  if (checked.length < 2)  { toast('Select at least 2 players', true); return; }
+  const games = DB.games.get();
+  if (games.some(g => g.batchId === S.batchId && g.status === 'active')) {
+    toast('An active game already exists', true); return;
+  }
+  // Everyone starts with 1 pot
+  const players = checked.map(cb => ({ id: cb.value, name: cb.dataset.name, pots: 1 }));
+  const game = { id: 'gm'+uid(), batchId: S.batchId, date, chipsPerPot: chips, rupeesPerPot: rupees, status: 'active', players, results: null, completedAt: null };
+  games.push(game); DB.games.set(games);
+  closeModal('m-start-game'); toast('Game started!');
+  S.gameId = game.id; renderGame(); S.stack.push('s-game'); go('s-game', false);
+}
+
+// ===== ACTIVE GAME =====
+function openGame(gameId) {
+  S.gameId = gameId; renderGame(); S.stack.push('s-game'); go('s-game', false);
+}
+
+function renderGame() {
+  const games = DB.games.get();
+  const g = games.find(x => x.id === S.gameId);
+  if (!g) return;
+  const b        = DB.batches.get().find(x => x.id === g.batchId);
+  const isAdmin  = b && b.adminId === S.session.id;
+  const isEditor = b && !isAdmin && (b.editors || []).includes(S.session.id);
+  const canEdit  = isAdmin || isEditor;
+  const totalPots  = g.players.reduce((s, p) => s + p.pots, 0);
+  const totalChips = totalPots * g.chipsPerPot;
+  const totalSpent = totalPots * g.rupeesPerPot;
+
+  document.getElementById('game-title').textContent = b ? b.name : 'Game';
+
+  const chipRate = `${g.chipsPerPot} chips = ₹${g.rupeesPerPot}`;
+
+  let h = `<span class="chip-label">📅 ${fmtDate(g.date)}</span>
+  <span class="chip-label">${chipRate}</span>
+  <div class="stats-grid-3">
+    <div class="stat-card"><div class="stat-val">${g.players.length}</div><div class="stat-lbl">Players</div></div>
+    <div class="stat-card"><div class="stat-val">${totalPots}</div><div class="stat-lbl">Total Pots</div></div>
+    <div class="stat-card"><div class="stat-val">₹${totalSpent}</div><div class="stat-lbl">Total Spent</div></div>
+  </div>
+  <div class="sh"><span class="sh-title">Players & Pots</span>${g.status === 'active' && canEdit ? `<button class="btn btn-sm btn-outline" onclick="openAddToGame()">+ Player</button>` : ''}</div>`;
+
+  g.players.forEach(p => {
+    const isMe     = p.id === S.session.id;
+    const spent    = p.pots * g.rupeesPerPot;
+    const invested = p.pots * g.chipsPerPot;
+    const co       = !!p.cashedOut;
+    const showRebuy   = g.status === 'active' && !co && (isMe || canEdit);
+    const showCashOut = g.status === 'active' && !co && canEdit && !isMe;
+    h += `<div class="gpc ${isMe ? 'me' : ''} ${co ? 'cashed-out' : ''}">
+      <div class="avatar">${p.name[0].toUpperCase()}</div>
+      <div class="p-info">
+        <div class="p-name">${esc(p.name)}${isMe ? ' <span style="font-size:0.7rem;color:#7070aa">(you)</span>' : ''}</div>
+        <div class="p-sub">${p.pots} pot${p.pots !== 1 ? 's' : ''} · ${invested} chips invested</div>
+        <div class="gpc-spent">₹${spent} spent</div>
+        ${co ? `<div style="font-size:0.72rem;color:#27ae60;margin-top:2px">Cashed out · ${p.finalChips} chips</div>` : ''}
+      </div>
+      <div class="gpc-pots">
+        ${co
+          ? `<div style="font-size:0.6rem;color:#27ae60;font-weight:700;text-transform:uppercase;text-align:center;line-height:1.3">Cashed<br>Out</div>`
+          : `<div class="gpc-pots-num">${p.pots}</div><div class="gpc-pots-lbl">Pots</div>`}
+      </div>
+      ${showRebuy    ? `<button class="btn-rebuy" onclick="addRebuy('${p.id}')">+ Rebuy</button>` : ''}
+      ${showCashOut  ? `<button class="btn btn-sm btn-danger" onclick="openCashOut('${p.id}')" style="white-space:nowrap;font-size:0.75rem">Cash Out</button>` : ''}
+    </div>`;
+  });
+
+  h += `<div class="info-box" style="margin-top:8px">
+    <strong>How rebuys work:</strong> When a player loses all their chips, tap <em>+ Rebuy</em> on their card — they pay ₹${g.rupeesPerPot} and get ${g.chipsPerPot} fresh chips. At end of game, count everyone's chips and tap <em>End Game</em>.
+  </div>`;
+
+  if (g.status === 'active' && canEdit) {
+    h += `<button class="btn btn-primary" onclick="openEndGame()">End Game & Count Chips</button>`;
+  } else if (g.status === 'completed') {
+    h += `<button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="openResults('${g.id}')">View Final Results →</button>`;
+  }
+
+  document.getElementById('c-game').innerHTML = h;
+}
+
+function addRebuy(playerId) {
+  const games = DB.games.get();
+  const gi = games.findIndex(g => g.id === S.gameId);
+  if (gi === -1) return;
+  const pi = games[gi].players.findIndex(p => p.id === playerId);
+  if (pi === -1) return;
+  games[gi].players[pi].pots++;
+  DB.games.set(games);
+  const name = games[gi].players[pi].name;
+  renderGame();
+  toast(`${name} rebuys — now ${games[gi].players[pi].pots} pot${games[gi].players[pi].pots !== 1 ? 's' : ''} (₹${games[gi].players[pi].pots * games[gi].rupeesPerPot} spent)`);
+}
+
+// ===== END GAME MODAL =====
+function openEndGame() {
+  const g = DB.games.get().find(x => x.id === S.gameId);
+  if (!g) return;
+  const totalPots  = g.players.reduce((s, p) => s + p.pots, 0);
+  const totalChips = totalPots * g.chipsPerPot;
+
+  document.getElementById('eg-sub').innerHTML =
+    `Each pot = <strong style="color:#f0c040">${g.chipsPerPot} chips</strong> worth <strong style="color:#f0c040">₹${g.rupeesPerPot}</strong>. Count everyone's chips and enter below.<br>
+     Total chips in play: <strong style="color:#e0e0e0">${totalChips}</strong> (${totalPots} pots × ${g.chipsPerPot})`;
+
+  document.getElementById('eg-rows').innerHTML = g.players.map(p => {
+    const invested = p.pots * g.chipsPerPot;
+    const spent    = p.pots * g.rupeesPerPot;
+    if (p.cashedOut) {
+      return `<div class="eg-row">
+        <div class="avatar" style="width:34px;height:34px;font-size:0.85rem">${p.name[0].toUpperCase()}</div>
+        <div class="p-info">
+          <div class="p-name">${esc(p.name)} <span style="font-size:0.7rem;color:#27ae60">(cashed out)</span></div>
+          <div class="eg-invested">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · ₹${spent} spent</div>
+        </div>
+        <div style="width:110px;text-align:right;font-size:0.92rem;font-weight:700;color:#27ae60">${p.finalChips}</div>
+      </div>`;
+    }
+    return `<div class="eg-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:0.85rem">${p.name[0].toUpperCase()}</div>
+      <div class="p-info">
+        <div class="p-name">${esc(p.name)}</div>
+        <div class="eg-invested">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · ₹${spent} spent</div>
+      </div>
+      <input class="eg-input" type="number" min="0" placeholder="chips" data-pid="${p.id}" oninput="updateBalance()" />
+    </div>`;
+  }).join('');
+
+  document.getElementById('eg-balance').textContent = '';
+  openModal('m-end-game');
+}
+
+function updateBalance() {
+  const g = DB.games.get().find(x => x.id === S.gameId);
+  if (!g) return;
+  const inputs = [...document.querySelectorAll('#eg-rows .eg-input')];
+  const vals = inputs.map(i => parseFloat(i.value) || 0);
+  const coTotal = g.players.filter(p => p.cashedOut).reduce((s, p) => s + (p.finalChips || 0), 0);
+  if (vals.every(v => v === 0) && coTotal === 0) { document.getElementById('eg-balance').textContent = ''; return; }
+  const totalFinal    = vals.reduce((s, v) => s + v, 0) + coTotal;
+  const totalExpected = g.players.reduce((s, p) => s + p.pots, 0) * g.chipsPerPot;
+  const diff = totalFinal - totalExpected;
+  const el   = document.getElementById('eg-balance');
+  if (Math.abs(diff) < 1) {
+    el.innerHTML = `<span style="color:#27ae60">✓ Total chips balance (${totalFinal})</span>`;
+  } else {
+    el.innerHTML = `<span style="color:#e74c3c">⚠ Total entered: ${totalFinal} · Expected: ${totalExpected} · Difference: ${diff > 0 ? '+' : ''}${diff} chips</span>`;
+  }
+}
+
+function submitEndGame() {
+  const games = DB.games.get();
+  const gi = games.findIndex(g => g.id === S.gameId);
+  if (gi === -1) return;
+  const g = games[gi];
+
+  const inputs = [...document.querySelectorAll('#eg-rows .eg-input')];
+  for (const inp of inputs) {
+    if (inp.value.trim() === '' || isNaN(parseFloat(inp.value))) {
+      const pid = inp.dataset.pid;
+      const p   = g.players.find(x => x.id === pid);
+      toast(`Enter final chips for ${p ? p.name : 'player'}`, true); return;
+    }
+  }
+
+  const chipRate = g.rupeesPerPot / g.chipsPerPot;
+
+  g.results = g.players.map(p => {
+    let finalChips;
+    if (p.cashedOut) {
+      finalChips = p.finalChips;
+    } else {
+      const inp = document.querySelector(`#eg-rows .eg-input[data-pid="${p.id}"]`);
+      finalChips = parseFloat(inp.value);
+    }
+    const invested = p.pots * g.chipsPerPot;
+    const netChips = finalChips - invested;
+    const spent    = p.pots * g.rupeesPerPot;
+    const net      = Math.round(netChips * chipRate);
+    return { id: p.id, name: p.name, pots: p.pots, spent, invested, finalChips, netChips, net };
+  }).sort((a, b) => b.net - a.net);
+
+  g.status = 'completed'; g.completedAt = new Date().toISOString();
+  DB.games.set(games);
+  closeModal('m-end-game');
+  openResults(g.id);
+}
+
+// ===== RESULTS =====
+function openResults(gameId) {
+  S.gameId = gameId; renderResults(); S.stack.push('s-results'); go('s-results', false);
+}
+function renderResults() {
+  const g = DB.games.get().find(x => x.id === S.gameId);
+  if (!g || !g.results) return;
+  const b    = DB.batches.get().find(x => x.id === g.batchId);
+  const best = g.results[0], worst = g.results[g.results.length - 1];
+  const totalPots = g.players.reduce((s, p) => s + p.pots, 0);
+
+  let h = `<span class="chip-label">📅 ${fmtDate(g.date)}</span>${b ? `<span class="chip-label">${esc(b.name)}</span>` : ''}
+  <div class="stats-grid-3">
+    <div class="stat-card"><div class="stat-val">${g.players.length}</div><div class="stat-lbl">Players</div></div>
+    <div class="stat-card"><div class="stat-val">${totalPots}</div><div class="stat-lbl">Total Pots</div></div>
+    <div class="stat-card"><div class="stat-val">₹${totalPots * g.rupeesPerPot}</div><div class="stat-lbl">Total Spent</div></div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-val" style="font-size:1rem;color:#27ae60">${esc(best.name)}</div>
+      <div class="stat-lbl">Top Winner</div>
+      <div style="font-size:0.82rem;color:#27ae60;margin-top:4px">+₹${best.net}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" style="font-size:1rem;color:#e74c3c">${esc(worst.name)}</div>
+      <div class="stat-lbl">Biggest Loss</div>
+      <div style="font-size:0.82rem;color:#e74c3c;margin-top:4px">-₹${Math.abs(worst.net)}</div>
+    </div>
+  </div>`;
+
+  const hasPrevBal = b && b.members.some(m => m.prevBalance && m.prevBalance !== 0);
+
+  h += `<div class="sh"><span class="sh-title">Final Standings</span></div>
+  <div class="card" style="padding:0 8px">
+    <table class="rtbl">
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>Pots</th>
+          <th>Spent</th>
+          <th>Final Chips</th>
+          <th>Net</th>
+          ${hasPrevBal ? '<th>Prev. Bal.</th><th>Adj. Net</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>`;
+
+  g.results.forEach((r, i) => {
+    const bm     = b ? b.members.find(m => m.id === r.id) : null;
+    const prevBal = bm ? (bm.prevBalance || 0) : 0;
+    const adjNet  = r.net + prevBal;
+    h += `<tr>
+      <td><strong>${i === 0 ? '👑 ' : ''}${esc(r.name)}</strong></td>
+      <td>${r.pots}</td>
+      <td>₹${r.spent}</td>
+      <td>${r.finalChips} chips</td>
+      <td class="${r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : 'zero'}">${r.net > 0 ? '+' : ''}₹${r.net}</td>
+      ${hasPrevBal ? `<td class="${prevBal>0?'pos':prevBal<0?'neg':'zero'}">${prevBal!==0?(prevBal>0?'+':'')+'₹'+prevBal:'—'}</td><td class="${adjNet>0?'pos':adjNet<0?'neg':'zero'}"><strong>${adjNet>0?'+':''}₹${adjNet}</strong></td>` : ''}
+    </tr>`;
+  });
+
+  h += `</tbody></table></div>`;
+
+  h += `<div class="info-box" style="margin-top:16px">
+    <strong>How it's calculated:</strong> Net ₹ = (Final chips − Chips invested) × ₹${g.rupeesPerPot}/${g.chipsPerPot} per chip.<br>
+    Example: ${esc(g.results[0].name)} had ${g.results[0].finalChips} chips, invested ${g.results[0].invested} chips → net ${g.results[0].netChips > 0 ? '+' : ''}${g.results[0].netChips} chips = ${g.results[0].net > 0 ? '+' : ''}₹${g.results[0].net}.
+  </div>`;
+
+  h += `<button class="btn btn-outline" style="width:100%;margin-top:20px" onclick="navToBatch()">← Back to Batch</button>`;
+  document.getElementById('c-results').innerHTML = h;
+}
+
+
+// ===== MONTHLY =====
+function goMonthly() { renderMonthly(); S.stack.push('s-monthly'); go('s-monthly', false); }
+function renderMonthly(month) {
+  const games  = DB.games.get().filter(g => g.batchId === S.batchId && g.status === 'completed');
+  const months = [...new Set(games.map(g => g.date.slice(0, 7)))].sort().reverse();
+  if (!month && months.length) month = months[0];
+  if (!months.length) {
+    document.getElementById('c-monthly').innerHTML =
+      `<div class="empty"><div class="empty-icon">📊</div><p>No completed games yet.</p></div>`;
+    return;
+  }
+
+  const fmtMonth = m => new Date(m + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  let h = `<div class="fg">
+    <label>Select Month</label>
+    <select style="width:100%;padding:11px 14px;background:#0f0f1e;border:1px solid #2a2a4a;border-radius:10px;color:#e0e0e0;font-size:0.9rem;outline:none" onchange="renderMonthly(this.value)">
+      ${months.map(m => `<option value="${m}" ${m===month?'selected':''}>${fmtMonth(m)}</option>`).join('')}
+    </select>
+  </div>`;
+
+  const mg = games.filter(g => g.date.startsWith(month));
+  if (!mg.length) { h += `<p style="color:#666;font-size:0.88rem">No games this month.</p>`; document.getElementById('c-monthly').innerHTML = h; return; }
+
+  const pmap = {};
+  mg.forEach(g => {
+    if (!g.results) return;
+    g.results.forEach(r => {
+      if (!pmap[r.id]) pmap[r.id] = { id: r.id, name: r.name, games: 0, pots: 0, spent: 0, net: 0 };
+      pmap[r.id].games++; pmap[r.id].pots += r.pots; pmap[r.id].spent += r.spent; pmap[r.id].net += r.net;
+    });
+  });
+  const players    = Object.values(pmap).sort((a, b) => b.net - a.net);
+  const totalSpent = mg.reduce((s, g) => s + g.players.reduce((ps, p) => ps + p.pots, 0) * g.rupeesPerPot, 0);
+  const totalPots  = mg.reduce((s, g) => s + g.players.reduce((ps, p) => ps + p.pots, 0), 0);
+  const uniquePlayers = Object.keys(pmap).length;
+  const maxAbsNet  = Math.max(...players.map(p => Math.abs(p.net)), 1);
+  const medals     = ['🥇', '🥈', '🥉'];
+
+  h += `<div class="stats-grid-3">
+    <div class="stat-card"><div class="stat-val">${mg.length}</div><div class="stat-lbl">Games</div></div>
+    <div class="stat-card"><div class="stat-val">${uniquePlayers}</div><div class="stat-lbl">Players</div></div>
+    <div class="stat-card"><div class="stat-val">₹${totalSpent}</div><div class="stat-lbl">Total Spent</div></div>
+  </div>
+  <div class="sh"><span class="sh-title">🏆 Leaderboard — ${fmtMonth(month)}</span></div>`;
+
+  players.forEach((p, i) => {
+    const isTop   = i === 0;
+    const barPct  = Math.round(Math.abs(p.net) / maxAbsNet * 100);
+    const barClr  = p.net > 0 ? '#27ae60' : p.net < 0 ? '#e74c3c' : '#555';
+    const netTxt  = `${p.net > 0 ? '+' : ''}₹${p.net}`;
+    const netCls  = p.net > 0 ? 'pos' : p.net < 0 ? 'neg' : 'zero';
+    const rankEl  = i < 3
+      ? `<div class="lb-rank">${medals[i]}</div>`
+      : `<div class="lb-rank-num">${i + 1}</div>`;
+    h += `<div class="lb-row${isTop ? ' lb-top' : ''}">
+      ${rankEl}
+      <div class="lb-info">
+        <div class="lb-name">${esc(p.name)}</div>
+        <div class="lb-sub">${p.games} game${p.games!==1?'s':''} · ${p.pots} pot${p.pots!==1?'s':''} · ₹${p.spent} spent</div>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="width:${barPct}%;background:${barClr}"></div></div>
+      </div>
+      <div class="lb-net ${netCls}">${netTxt}</div>
+    </div>`;
+  });
+
+  h += `<div class="sh" style="margin-top:20px"><span class="sh-title">Games This Month</span></div>`;
+  mg.sort((a, b) => b.date.localeCompare(a.date)).forEach(g => {
+    const tp  = g.players.reduce((s, p) => s + p.pots, 0);
+    const win = g.results ? [...g.results].sort((a, b) => b.net - a.net)[0] : null;
+    h += `<div class="ghc" onclick="openResults('${g.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:0.88rem;font-weight:500">${fmtDate(g.date)}</div>
+        <span style="font-size:0.75rem;color:#9090cc">View →</span>
+      </div>
+      <div class="ghc-info">${tp} pots · ₹${tp * g.rupeesPerPot} total${win ? ` · 🥇 ${esc(win.name)} (+₹${win.net})` : ''}</div>
+    </div>`;
+  });
+  document.getElementById('c-monthly').innerHTML = h;
+}
+
+// ===== ADD PLAYER TO GAME =====
+function openAddToGame() {
+  const g = DB.games.get().find(x => x.id === S.gameId);
+  const b = DB.batches.get().find(x => x.id === (g ? g.batchId : S.batchId));
+  if (!g || !b) return;
+  const inGame = g.players.map(p => p.id);
+  const avail  = b.members.filter(m => !inGame.includes(m.id));
+  document.getElementById('atg-guest').value = '';
+  document.getElementById('atg-list').innerHTML = avail.length
+    ? avail.map(m => `
+        <div class="player-row">
+          <div class="avatar">${m.name[0].toUpperCase()}</div>
+          <div class="p-info"><div class="p-name">${esc(m.name)}</div></div>
+          <button class="btn btn-sm btn-outline" onclick="addPlayerToGame('${m.id}','${esc(m.name)}')">Add</button>
+        </div>`).join('')
+    : '<p style="font-size:0.8rem;color:#666;padding:4px 0">All batch members are already in the game.</p>';
+  openModal('m-add-to-game');
+}
+function addPlayerToGame(playerId, playerName) {
+  const games = DB.games.get();
+  const gi = games.findIndex(g => g.id === S.gameId);
+  if (gi === -1) return;
+  if (games[gi].players.some(p => p.id === playerId)) { toast('Already in game', true); return; }
+  games[gi].players.push({ id: playerId, name: playerName, pots: 1, cashedOut: false, finalChips: null });
+  DB.games.set(games);
+  closeModal('m-add-to-game');
+  renderGame();
+  toast(`${playerName} added to game!`);
+}
+function addGuestToGame() {
+  const name = document.getElementById('atg-guest').value.trim();
+  if (!name) { toast('Enter guest name', true); return; }
+  const games   = DB.games.get();
+  const gi      = games.findIndex(g => g.id === S.gameId);
+  if (gi === -1) return;
+  const batches = DB.batches.get();
+  const bi      = batches.findIndex(b => b.id === games[gi].batchId);
+  const guestId = 'g' + uid();
+  if (bi !== -1) batches[bi].members.push({ id: guestId, name, guest: true });
+  games[gi].players.push({ id: guestId, name, pots: 1, cashedOut: false, finalChips: null });
+  DB.batches.set(batches);
+  DB.games.set(games);
+  closeModal('m-add-to-game');
+  renderGame();
+  toast(`${name} added to batch & game!`);
+}
+
+// ===== CASH OUT PLAYER =====
+let _cashOutPid = null;
+function openCashOut(playerId) {
+  const g = DB.games.get().find(x => x.id === S.gameId);
+  if (!g) return;
+  const p = g.players.find(x => x.id === playerId);
+  if (!p) return;
+  _cashOutPid = playerId;
+  const invested = p.pots * g.chipsPerPot;
+  document.getElementById('co-sub').textContent = `${p.name} is leaving. Enter their final chip count.`;
+  document.getElementById('co-info').innerHTML =
+    `<div class="info-box">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · ₹${p.pots * g.rupeesPerPot} spent</div>`;
+  document.getElementById('co-chips').value = '';
+  openModal('m-cashout');
+}
+function submitCashOut() {
+  const chips = parseFloat(document.getElementById('co-chips').value);
+  if (isNaN(chips) || chips < 0) { toast('Enter a valid chip count', true); return; }
+  const games = DB.games.get();
+  const gi    = games.findIndex(g => g.id === S.gameId);
+  if (gi === -1) return;
+  const pi = games[gi].players.findIndex(p => p.id === _cashOutPid);
+  if (pi === -1) return;
+  games[gi].players[pi].cashedOut   = true;
+  games[gi].players[pi].finalChips  = chips;
+  DB.games.set(games);
+  closeModal('m-cashout');
+  renderGame();
+  toast(`${games[gi].players[pi].name} cashed out with ${chips} chips`);
+}
+
+// ===== PREVIOUS BALANCE =====
+function openPrevBalance(memberId) {
+  const b = DB.batches.get().find(x => x.id === S.batchId);
+  const m = b ? b.members.find(x => x.id === memberId) : null;
+  if (!m) return;
+  document.getElementById('pb-member-id').value = memberId;
+  document.getElementById('pb-amount').value    = m.prevBalance || '';
+  openModal('m-prev-balance');
+}
+function savePrevBalance() {
+  const memberId = document.getElementById('pb-member-id').value;
+  const amount   = parseFloat(document.getElementById('pb-amount').value) || 0;
+  const batches  = DB.batches.get();
+  const bi = batches.findIndex(b => b.id === S.batchId);
+  if (bi === -1) return;
+  const mi = batches[bi].members.findIndex(m => m.id === memberId);
+  if (mi === -1) return;
+  batches[bi].members[mi].prevBalance = amount;
+  DB.batches.set(batches);
+  closeModal('m-prev-balance');
+  renderBatch();
+  toast('Previous balance saved!');
+}
+
+// ===== CREATE BATCH =====
+function createBatch() {
+  const name = document.getElementById('cb-name').value.trim();
+  if (!name) { toast('Enter a batch name', true); return; }
+  const b = { id: 'b'+uid(), name, adminId: S.session.id, members: [{ id: S.session.id, name: S.session.name, guest: false }], editors: [], at: Date.now() };
+  const batches = DB.batches.get(); batches.push(b); DB.batches.set(batches);
+  closeModal('m-create-batch'); renderDash(); toast(`"${name}" created!`);
+}
+
+// ===== INIT =====
+(function init() {
+  const sess = DB.session.get();
+  if (sess) { S.session = sess; S.stack = ['s-dash']; renderDash(); go('s-dash', false); }
+  else { go('s-auth', false); }
+  document.querySelectorAll('.modal-bg').forEach(el => {
+    el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+  });
+})();
+</script>
+</body>
+</html>

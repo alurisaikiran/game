@@ -324,7 +324,7 @@
     <div class="fg"><label>Date</label><input id="sg-date" type="date" /></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="fg"><label>Chips per Pot</label><input id="sg-chips" type="number" placeholder="e.g. 200" min="1" /></div>
-      <div class="fg"><label>₹ per Pot</label><input id="sg-rupees" type="number" placeholder="e.g. 20" min="1" /></div>
+      <div class="fg"><label>$ per Pot</label><input id="sg-dollars" type="number" placeholder="e.g. 20" min="1" /></div>
     </div>
     <div class="fg"><label>Players in this game</label><div id="sg-players"></div></div>
     <div class="modal-row">
@@ -382,7 +382,7 @@
   <div class="modal">
     <div class="modal-title">Previous Balance</div>
     <div class="modal-sub">Carry-over amount for this player from outside tracked games.<br>Positive = they are owed money · Negative = they owe money.</div>
-    <div class="fg"><label>Balance (₹)</label><input id="pb-amount" type="number" placeholder="e.g. -500 or 200" /></div>
+    <div class="fg"><label>Balance ($)</label><input id="pb-amount" type="number" placeholder="e.g. -500 or 200" /></div>
     <input type="hidden" id="pb-member-id" />
     <div class="modal-row">
       <button class="btn btn-outline" onclick="closeModal('m-prev-balance')">Cancel</button>
@@ -402,6 +402,25 @@ const DB = {
 };
 
 let S = { session: null, batchId: null, gameId: null, stack: [] };
+let undoStack = []; // { gameId, players, description }
+
+function pushUndo(description) {
+  const g = DB.games.get().find(x => x.id === S.gameId);
+  if (!g) return;
+  undoStack.push({ gameId: S.gameId, players: JSON.parse(JSON.stringify(g.players)), description });
+}
+function undoLastAction() {
+  const entry = undoStack.filter(e => e.gameId === S.gameId).pop();
+  if (!entry) return;
+  undoStack = undoStack.filter(e => e !== entry);
+  const games = DB.games.get();
+  const gi = games.findIndex(g => g.id === entry.gameId);
+  if (gi === -1) return;
+  games[gi].players = entry.players;
+  DB.games.set(games);
+  renderGame();
+  toast(`Undone: ${entry.description}`);
+}
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -414,14 +433,14 @@ function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 function fmtDate(s) {
   if (!s) return '';
-  return new Date(s + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(s + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
 function today() { return new Date().toISOString().split('T')[0]; }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// chips → rupees
+// chips → dollars
 function chipsToRupees(chips, game) {
-  return Math.round(chips * (game.rupeesPerPot / game.chipsPerPot));
+  return Math.round(chips * (game.dollarsPerPot / game.chipsPerPot));
 }
 
 // ===== NAVIGATION =====
@@ -497,7 +516,7 @@ function renderDash() {
   let totalNet = 0;
   done.forEach(g => { if (g.results) { const r = g.results.find(r => r.id === myId); if (r) totalNet += r.net; } });
   const netColor = totalNet > 0 ? '#27ae60' : totalNet < 0 ? '#e74c3c' : '#888';
-  const netText  = `${totalNet > 0 ? '+' : ''}₹${totalNet}`;
+  const netText  = `${totalNet > 0 ? '+' : ''}$${totalNet}`;
 
   let h = `<div class="dash-hero">
     <div class="dash-greeting">${timeGreet}</div>
@@ -524,21 +543,21 @@ function renderDash() {
   if (!mine.length) {
     h += `<div class="empty"><div class="empty-icon">🃏</div><p>No batches yet.<br>Tap <strong>+</strong> to create your first batch.</p></div>`;
   } else {
-    mine.forEach(b => {
+    [...mine].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)).forEach(b => {
       const isAdmin  = b.adminId === myId;
       const bGames   = games.filter(g => g.batchId === b.id && g.status === 'completed');
       const gc       = games.filter(g => g.batchId === b.id).length;
       const lastGame = bGames.sort((a, x) => x.date.localeCompare(a.date))[0];
       const lastTxt  = lastGame ? `Last played ${fmtDate(lastGame.date)}` : 'No games yet';
-      // user's net in this batch
       let bNet = 0;
       bGames.forEach(g => { if (g.results) { const r = g.results.find(r => r.id === myId); if (r) bNet += r.net; } });
-      const bNetStr  = bGames.length ? `<span style="color:${bNet>0?'#27ae60':bNet<0?'#e74c3c':'#888'};font-weight:700">${bNet>0?'+':''}₹${bNet}</span>` : '';
+      const bNetStr  = bGames.length ? `<span style="color:${bNet>0?'#27ae60':bNet<0?'#e74c3c':'#888'};font-weight:700">${bNet>0?'+':''}$${bNet}</span>` : '';
+      const pinnedAccent = b.pinned ? 'background:linear-gradient(180deg,#f0c040,#f0c040);' : '';
       h += `<div class="batch-card" onclick="openBatch('${b.id}')">
-        <div class="batch-card-accent"></div>
+        <div class="batch-card-accent" style="${pinnedAccent}"></div>
         <div class="batch-card-body">
           <div class="batch-card-top">
-            <div class="batch-card-name">${esc(b.name)}</div>
+            <div class="batch-card-name">${b.pinned ? '⭐ ' : ''}${esc(b.name)}</div>
             <span class="badge ${isAdmin ? 'badge-admin' : 'badge-member'}">${isAdmin ? 'Admin' : 'Member'}</span>
           </div>
           <div class="batch-card-meta">${b.members.length} player${b.members.length!==1?'s':''} · ${gc} game${gc!==1?'s':''} ${bNetStr}</div>
@@ -581,10 +600,10 @@ function renderBatch() {
         <div class="p-name">${esc(m.name)}${isMe ? ' <span style="font-size:0.7rem;color:#7070aa">(you)</span>' : ''}</div>
         ${isAdm ? '<div class="p-sub">Admin</div>' : ''}
         ${hasAccess ? '<div class="p-sub" style="color:#f0c040">Editor</div>' : ''}
-        ${prevBal !== 0 ? `<div class="p-sub" style="color:${prevBal>0?'#27ae60':'#e74c3c'}">${prevBal>0?'+':''}₹${prevBal} prev. balance</div>` : ''}
+        ${prevBal !== 0 ? `<div class="p-sub" style="color:${prevBal>0?'#27ae60':'#e74c3c'}">${prevBal>0?'+':''}$${prevBal} prev. balance</div>` : ''}
       </div>
       ${isAdmin && !isAdm ? `<button class="btn btn-sm ${hasAccess ? 'btn-danger' : 'btn-outline'}" onclick="${hasAccess ? 'revokeAccess' : 'grantAccess'}('${m.id}')" style="font-size:0.7rem;padding:4px 8px;margin-right:4px">${hasAccess ? 'Revoke' : '+ Access'}</button>` : ''}
-      ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="openPrevBalance('${m.id}')" style="font-size:0.7rem;padding:4px 8px;margin-right:4px">₹ Bal</button>` : ''}
+      ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="openPrevBalance('${m.id}')" style="font-size:0.7rem;padding:4px 8px;margin-right:4px">$ Bal</button>` : ''}
       ${isAdmin && !isMe ? `<button class="btn btn-sm btn-danger btn-icon" onclick="removeMember('${m.id}')">×</button>` : ''}
     </div>`;
   });
@@ -592,12 +611,12 @@ function renderBatch() {
 
   if (ag) {
     const totalPots  = ag.players.reduce((s, p) => s + p.pots, 0);
-    const totalSpent = totalPots * ag.rupeesPerPot;
+    const totalSpent = totalPots * ag.dollarsPerPot;
     h += `<div class="sh"><span class="sh-title">Active Game</span></div>
     <div class="agb" onclick="openGame('${ag.id}')">
       <div style="display:flex;align-items:center"><div class="pulse-dot"></div>
         <div><div style="font-size:0.9rem;font-weight:600">${fmtDate(ag.date)}</div>
-        <div style="font-size:0.76rem;color:#888">${ag.chipsPerPot} chips/pot · ₹${ag.rupeesPerPot}/pot · ₹${totalSpent} in play</div></div>
+        <div style="font-size:0.76rem;color:#888">${ag.chipsPerPot} chips/pot · $${ag.dollarsPerPot}/pot · $${totalSpent} in play</div></div>
       </div><span style="color:#27ae60;font-size:0.82rem">Open →</span>
     </div>`;
   } else if (canEdit) {
@@ -611,11 +630,16 @@ function renderBatch() {
       const win = g.results ? [...g.results].sort((a, x) => x.net - a.net)[0] : null;
       const totalPots = g.players.reduce((s, p) => s + p.pots, 0);
       h += `<div class="ghc" onclick="openResults('${g.id}')">
-        <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <div style="font-size:0.88rem;font-weight:500">${fmtDate(g.date)}</div>
-          <span style="font-size:0.75rem;color:#9090cc">View →</span>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            ${isAdmin ? `
+              <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();reopenGameById('${g.id}')" style="font-size:0.68rem;padding:3px 8px;border-color:#9090cc;color:#9090cc">↩ Reopen</button>
+              <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteGameById('${g.id}')" style="font-size:0.68rem;padding:3px 8px">🗑</button>
+            ` : `<span style="font-size:0.75rem;color:#9090cc">View →</span>`}
+          </div>
         </div>
-        <div class="ghc-info">${g.chipsPerPot} chips/pot · ₹${g.rupeesPerPot}/pot · ${totalPots} pots total${win ? ` · 🏆 ${esc(win.name)} (+₹${win.net})` : ''}</div>
+        <div class="ghc-info">${g.chipsPerPot} chips/pot · $${g.dollarsPerPot}/pot · ${totalPots} pots total${win ? ` · 🏆 ${esc(win.name)} (+$${win.net})` : ''}</div>
       </div>`;
     });
     h += '</div>';
@@ -750,7 +774,7 @@ function openStartGame() {
   if (!b) return;
   document.getElementById('sg-date').value   = today();
   document.getElementById('sg-chips').value  = '';
-  document.getElementById('sg-rupees').value = '';
+  document.getElementById('sg-dollars').value = '';
   document.getElementById('sg-players').innerHTML = b.members.map(m => `
     <label class="player-check">
       <input type="checkbox" value="${m.id}" data-name="${esc(m.name)}" checked />
@@ -761,10 +785,10 @@ function openStartGame() {
 function startGame() {
   const date   = document.getElementById('sg-date').value;
   const chips  = parseFloat(document.getElementById('sg-chips').value);
-  const rupees = parseFloat(document.getElementById('sg-rupees').value);
+  const dollars = parseFloat(document.getElementById('sg-dollars').value);
   if (!date)               { toast('Select a date', true); return; }
   if (!chips  || chips<=0) { toast('Enter chips per pot', true); return; }
-  if (!rupees || rupees<=0){ toast('Enter ₹ per pot', true); return; }
+  if (!dollars || dollars<=0){ toast('Enter $ per pot', true); return; }
   const checked = [...document.querySelectorAll('#sg-players input:checked')];
   if (checked.length < 2)  { toast('Select at least 2 players', true); return; }
   const games = DB.games.get();
@@ -773,7 +797,7 @@ function startGame() {
   }
   // Everyone starts with 1 pot
   const players = checked.map(cb => ({ id: cb.value, name: cb.dataset.name, pots: 1 }));
-  const game = { id: 'gm'+uid(), batchId: S.batchId, date, chipsPerPot: chips, rupeesPerPot: rupees, status: 'active', players, results: null, completedAt: null };
+  const game = { id: 'gm'+uid(), batchId: S.batchId, date, chipsPerPot: chips, dollarsPerPot: dollars, status: 'active', players, results: null, completedAt: null };
   games.push(game); DB.games.set(games);
   closeModal('m-start-game'); toast('Game started!');
   S.gameId = game.id; renderGame(); S.stack.push('s-game'); go('s-game', false);
@@ -794,24 +818,27 @@ function renderGame() {
   const canEdit  = isAdmin || isEditor;
   const totalPots  = g.players.reduce((s, p) => s + p.pots, 0);
   const totalChips = totalPots * g.chipsPerPot;
-  const totalSpent = totalPots * g.rupeesPerPot;
+  const totalSpent = totalPots * g.dollarsPerPot;
 
   document.getElementById('game-title').textContent = b ? b.name : 'Game';
 
-  const chipRate = `${g.chipsPerPot} chips = ₹${g.rupeesPerPot}`;
+  const chipRate = `${g.chipsPerPot} chips = $${g.dollarsPerPot}`;
 
   let h = `<span class="chip-label">📅 ${fmtDate(g.date)}</span>
   <span class="chip-label">${chipRate}</span>
   <div class="stats-grid-3">
     <div class="stat-card"><div class="stat-val">${g.players.length}</div><div class="stat-lbl">Players</div></div>
     <div class="stat-card"><div class="stat-val">${totalPots}</div><div class="stat-lbl">Total Pots</div></div>
-    <div class="stat-card"><div class="stat-val">₹${totalSpent}</div><div class="stat-lbl">Total Spent</div></div>
+    <div class="stat-card"><div class="stat-val">$${totalSpent}</div><div class="stat-lbl">Total Spent</div></div>
   </div>
-  <div class="sh"><span class="sh-title">Players & Pots</span>${g.status === 'active' && canEdit ? `<button class="btn btn-sm btn-outline" onclick="openAddToGame()">+ Player</button>` : ''}</div>`;
+  <div class="sh"><span class="sh-title">Players & Pots</span><div style="display:flex;gap:8px">
+    ${g.status === 'active' && canEdit && undoStack.some(e => e.gameId === S.gameId) ? `<button class="btn btn-sm btn-outline" onclick="undoLastAction()" style="border-color:#9090cc;color:#9090cc" title="Undo last action">↩ Undo</button>` : ''}
+    ${g.status === 'active' && canEdit ? `<button class="btn btn-sm btn-outline" onclick="openAddToGame()">+ Player</button>` : ''}
+  </div></div>`;
 
   g.players.forEach(p => {
     const isMe     = p.id === S.session.id;
-    const spent    = p.pots * g.rupeesPerPot;
+    const spent    = p.pots * g.dollarsPerPot;
     const invested = p.pots * g.chipsPerPot;
     const co       = !!p.cashedOut;
     const showRebuy   = g.status === 'active' && !co && (isMe || canEdit);
@@ -821,7 +848,7 @@ function renderGame() {
       <div class="p-info">
         <div class="p-name">${esc(p.name)}${isMe ? ' <span style="font-size:0.7rem;color:#7070aa">(you)</span>' : ''}</div>
         <div class="p-sub">${p.pots} pot${p.pots !== 1 ? 's' : ''} · ${invested} chips invested</div>
-        <div class="gpc-spent">₹${spent} spent</div>
+        <div class="gpc-spent">$${spent} spent</div>
         ${co ? `<div style="font-size:0.72rem;color:#27ae60;margin-top:2px">Cashed out · ${p.finalChips} chips</div>` : ''}
       </div>
       <div class="gpc-pots">
@@ -835,7 +862,7 @@ function renderGame() {
   });
 
   h += `<div class="info-box" style="margin-top:8px">
-    <strong>How rebuys work:</strong> When a player loses all their chips, tap <em>+ Rebuy</em> on their card — they pay ₹${g.rupeesPerPot} and get ${g.chipsPerPot} fresh chips. At end of game, count everyone's chips and tap <em>End Game</em>.
+    <strong>How rebuys work:</strong> When a player loses all their chips, tap <em>+ Rebuy</em> on their card — they pay $${g.dollarsPerPot} and get ${g.chipsPerPot} fresh chips. At end of game, count everyone's chips and tap <em>End Game</em>.
   </div>`;
 
   if (g.status === 'active' && canEdit) {
@@ -853,11 +880,12 @@ function addRebuy(playerId) {
   if (gi === -1) return;
   const pi = games[gi].players.findIndex(p => p.id === playerId);
   if (pi === -1) return;
+  pushUndo(`${games[gi].players[pi].name} rebuy`);
   games[gi].players[pi].pots++;
   DB.games.set(games);
   const name = games[gi].players[pi].name;
   renderGame();
-  toast(`${name} rebuys — now ${games[gi].players[pi].pots} pot${games[gi].players[pi].pots !== 1 ? 's' : ''} (₹${games[gi].players[pi].pots * games[gi].rupeesPerPot} spent)`);
+  toast(`${name} rebuys — now ${games[gi].players[pi].pots} pot${games[gi].players[pi].pots !== 1 ? 's' : ''} ($${games[gi].players[pi].pots * games[gi].dollarsPerPot} spent)`);
 }
 
 // ===== END GAME MODAL =====
@@ -868,18 +896,18 @@ function openEndGame() {
   const totalChips = totalPots * g.chipsPerPot;
 
   document.getElementById('eg-sub').innerHTML =
-    `Each pot = <strong style="color:#f0c040">${g.chipsPerPot} chips</strong> worth <strong style="color:#f0c040">₹${g.rupeesPerPot}</strong>. Count everyone's chips and enter below.<br>
+    `Each pot = <strong style="color:#f0c040">${g.chipsPerPot} chips</strong> worth <strong style="color:#f0c040">$${g.dollarsPerPot}</strong>. Count everyone's chips and enter below.<br>
      Total chips in play: <strong style="color:#e0e0e0">${totalChips}</strong> (${totalPots} pots × ${g.chipsPerPot})`;
 
   document.getElementById('eg-rows').innerHTML = g.players.map(p => {
     const invested = p.pots * g.chipsPerPot;
-    const spent    = p.pots * g.rupeesPerPot;
+    const spent    = p.pots * g.dollarsPerPot;
     if (p.cashedOut) {
       return `<div class="eg-row">
         <div class="avatar" style="width:34px;height:34px;font-size:0.85rem">${p.name[0].toUpperCase()}</div>
         <div class="p-info">
           <div class="p-name">${esc(p.name)} <span style="font-size:0.7rem;color:#27ae60">(cashed out)</span></div>
-          <div class="eg-invested">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · ₹${spent} spent</div>
+          <div class="eg-invested">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · $${spent} spent</div>
         </div>
         <div style="width:110px;text-align:right;font-size:0.92rem;font-weight:700;color:#27ae60">${p.finalChips}</div>
       </div>`;
@@ -888,7 +916,7 @@ function openEndGame() {
       <div class="avatar" style="width:34px;height:34px;font-size:0.85rem">${p.name[0].toUpperCase()}</div>
       <div class="p-info">
         <div class="p-name">${esc(p.name)}</div>
-        <div class="eg-invested">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · ₹${spent} spent</div>
+        <div class="eg-invested">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · $${spent} spent</div>
       </div>
       <input class="eg-input" type="number" min="0" placeholder="chips" data-pid="${p.id}" oninput="updateBalance()" />
     </div>`;
@@ -931,7 +959,7 @@ function submitEndGame() {
     }
   }
 
-  const chipRate = g.rupeesPerPot / g.chipsPerPot;
+  const chipRate = g.dollarsPerPot / g.chipsPerPot;
 
   g.results = g.players.map(p => {
     let finalChips;
@@ -943,7 +971,7 @@ function submitEndGame() {
     }
     const invested = p.pots * g.chipsPerPot;
     const netChips = finalChips - invested;
-    const spent    = p.pots * g.rupeesPerPot;
+    const spent    = p.pots * g.dollarsPerPot;
     const net      = Math.round(netChips * chipRate);
     return { id: p.id, name: p.name, pots: p.pots, spent, invested, finalChips, netChips, net };
   }).sort((a, b) => b.net - a.net);
@@ -969,18 +997,18 @@ function renderResults() {
   <div class="stats-grid-3">
     <div class="stat-card"><div class="stat-val">${g.players.length}</div><div class="stat-lbl">Players</div></div>
     <div class="stat-card"><div class="stat-val">${totalPots}</div><div class="stat-lbl">Total Pots</div></div>
-    <div class="stat-card"><div class="stat-val">₹${totalPots * g.rupeesPerPot}</div><div class="stat-lbl">Total Spent</div></div>
+    <div class="stat-card"><div class="stat-val">$${totalPots * g.dollarsPerPot}</div><div class="stat-lbl">Total Spent</div></div>
   </div>
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-val" style="font-size:1rem;color:#27ae60">${esc(best.name)}</div>
       <div class="stat-lbl">Top Winner</div>
-      <div style="font-size:0.82rem;color:#27ae60;margin-top:4px">+₹${best.net}</div>
+      <div style="font-size:0.82rem;color:#27ae60;margin-top:4px">+$${best.net}</div>
     </div>
     <div class="stat-card">
       <div class="stat-val" style="font-size:1rem;color:#e74c3c">${esc(worst.name)}</div>
       <div class="stat-lbl">Biggest Loss</div>
-      <div style="font-size:0.82rem;color:#e74c3c;margin-top:4px">-₹${Math.abs(worst.net)}</div>
+      <div style="font-size:0.82rem;color:#e74c3c;margin-top:4px">-$${Math.abs(worst.net)}</div>
     </div>
   </div>`;
 
@@ -1008,24 +1036,100 @@ function renderResults() {
     h += `<tr>
       <td><strong>${i === 0 ? '👑 ' : ''}${esc(r.name)}</strong></td>
       <td>${r.pots}</td>
-      <td>₹${r.spent}</td>
+      <td>$${r.spent}</td>
       <td>${r.finalChips} chips</td>
-      <td class="${r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : 'zero'}">${r.net > 0 ? '+' : ''}₹${r.net}</td>
-      ${hasPrevBal ? `<td class="${prevBal>0?'pos':prevBal<0?'neg':'zero'}">${prevBal!==0?(prevBal>0?'+':'')+'₹'+prevBal:'—'}</td><td class="${adjNet>0?'pos':adjNet<0?'neg':'zero'}"><strong>${adjNet>0?'+':''}₹${adjNet}</strong></td>` : ''}
+      <td class="${r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : 'zero'}">${r.net > 0 ? '+' : ''}$${r.net}</td>
+      ${hasPrevBal ? `<td class="${prevBal>0?'pos':prevBal<0?'neg':'zero'}">${prevBal!==0?(prevBal>0?'+':'')+'$'+prevBal:'—'}</td><td class="${adjNet>0?'pos':adjNet<0?'neg':'zero'}"><strong>${adjNet>0?'+':''}$${adjNet}</strong></td>` : ''}
     </tr>`;
   });
 
   h += `</tbody></table></div>`;
 
   h += `<div class="info-box" style="margin-top:16px">
-    <strong>How it's calculated:</strong> Net ₹ = (Final chips − Chips invested) × ₹${g.rupeesPerPot}/${g.chipsPerPot} per chip.<br>
-    Example: ${esc(g.results[0].name)} had ${g.results[0].finalChips} chips, invested ${g.results[0].invested} chips → net ${g.results[0].netChips > 0 ? '+' : ''}${g.results[0].netChips} chips = ${g.results[0].net > 0 ? '+' : ''}₹${g.results[0].net}.
+    <strong>How it's calculated:</strong> Net $ = (Final chips − Chips invested) × $${g.dollarsPerPot}/${g.chipsPerPot} per chip.<br>
+    Example: ${esc(g.results[0].name)} had ${g.results[0].finalChips} chips, invested ${g.results[0].invested} chips → net ${g.results[0].netChips > 0 ? '+' : ''}${g.results[0].netChips} chips = ${g.results[0].net > 0 ? '+' : ''}$${g.results[0].net}.
   </div>`;
 
-  h += `<button class="btn btn-outline" style="width:100%;margin-top:20px" onclick="navToBatch()">← Back to Batch</button>`;
+  const isAdmin  = b && b.adminId === S.session.id;
+  const isPinned = b && !!b.pinned;
+  if (isAdmin) {
+    h += isPinned
+      ? `<button class="btn btn-outline" style="width:100%;margin-top:16px;border-color:#f0c040;color:#f0c040" onclick="unpinBatch()">⭐ Saved to Profile — Tap to Remove</button>`
+      : `<button class="btn btn-outline" style="width:100%;margin-top:16px" onclick="pinBatch()">☆ Save Batch to Profile</button>`;
+    h += `<div class="sh" style="margin-top:20px"><span class="sh-title">Admin Actions</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <button class="btn btn-outline" onclick="reopenGame()" style="border-color:#9090cc;color:#9090cc">↩ Reopen Game</button>
+      <button class="btn btn-danger" onclick="deleteGame()">🗑 Delete Game</button>
+    </div>`;
+  }
+
+  h += `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="navToBatch()">← Back to Batch</button>`;
   document.getElementById('c-results').innerHTML = h;
 }
 
+function pinBatch() {
+  const batches = DB.batches.get();
+  const bi = batches.findIndex(b => b.id === S.batchId);
+  if (bi === -1) return;
+  batches[bi].pinned = true;
+  DB.batches.set(batches);
+  renderResults();
+  toast('Batch saved to your profile! ⭐');
+}
+function unpinBatch() {
+  const batches = DB.batches.get();
+  const bi = batches.findIndex(b => b.id === S.batchId);
+  if (bi === -1) return;
+  batches[bi].pinned = false;
+  DB.batches.set(batches);
+  renderResults();
+  toast('Batch removed from profile.');
+}
+
+function reopenGame() {
+  if (!confirm('Reopen this game? Results will be cleared and the game will go back to active.')) return;
+  const games = DB.games.get();
+  const gi = games.findIndex(g => g.id === S.gameId);
+  if (gi === -1) return;
+  games[gi].status = 'active';
+  games[gi].results = null;
+  games[gi].completedAt = null;
+  games[gi].players.forEach(p => { p.cashedOut = false; p.finalChips = null; });
+  DB.games.set(games);
+  undoStack = undoStack.filter(e => e.gameId !== S.gameId);
+  S.stack = S.stack.filter(s => s !== 's-results');
+  go('s-game', false); renderGame();
+  toast('Game reopened — make your changes and end it again.');
+}
+function deleteGame() {
+  if (!confirm('Delete this game and its results permanently?')) return;
+  DB.games.set(DB.games.get().filter(g => g.id !== S.gameId));
+  undoStack = undoStack.filter(e => e.gameId !== S.gameId);
+  navToBatch();
+  toast('Game deleted.');
+}
+function reopenGameById(gameId) {
+  if (!confirm('Reopen this game? Results will be cleared and it will go back to active.')) return;
+  const games = DB.games.get();
+  const gi = games.findIndex(g => g.id === gameId);
+  if (gi === -1) return;
+  games[gi].status = 'active';
+  games[gi].results = null;
+  games[gi].completedAt = null;
+  games[gi].players.forEach(p => { p.cashedOut = false; p.finalChips = null; });
+  DB.games.set(games);
+  undoStack = undoStack.filter(e => e.gameId !== gameId);
+  S.gameId = gameId;
+  S.stack.push('s-game'); go('s-game', false); renderGame();
+  toast('Game reopened — make your changes and end it again.');
+}
+function deleteGameById(gameId) {
+  if (!confirm('Delete this game and its results permanently?')) return;
+  DB.games.set(DB.games.get().filter(g => g.id !== gameId));
+  undoStack = undoStack.filter(e => e.gameId !== gameId);
+  renderBatch();
+  toast('Game deleted.');
+}
 
 // ===== MONTHLY =====
 function goMonthly() { renderMonthly(); S.stack.push('s-monthly'); go('s-monthly', false); }
@@ -1039,7 +1143,7 @@ function renderMonthly(month) {
     return;
   }
 
-  const fmtMonth = m => new Date(m + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const fmtMonth = m => new Date(m + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   let h = `<div class="fg">
     <label>Select Month</label>
     <select style="width:100%;padding:11px 14px;background:#0f0f1e;border:1px solid #2a2a4a;border-radius:10px;color:#e0e0e0;font-size:0.9rem;outline:none" onchange="renderMonthly(this.value)">
@@ -1059,7 +1163,7 @@ function renderMonthly(month) {
     });
   });
   const players    = Object.values(pmap).sort((a, b) => b.net - a.net);
-  const totalSpent = mg.reduce((s, g) => s + g.players.reduce((ps, p) => ps + p.pots, 0) * g.rupeesPerPot, 0);
+  const totalSpent = mg.reduce((s, g) => s + g.players.reduce((ps, p) => ps + p.pots, 0) * g.dollarsPerPot, 0);
   const totalPots  = mg.reduce((s, g) => s + g.players.reduce((ps, p) => ps + p.pots, 0), 0);
   const uniquePlayers = Object.keys(pmap).length;
   const maxAbsNet  = Math.max(...players.map(p => Math.abs(p.net)), 1);
@@ -1068,7 +1172,7 @@ function renderMonthly(month) {
   h += `<div class="stats-grid-3">
     <div class="stat-card"><div class="stat-val">${mg.length}</div><div class="stat-lbl">Games</div></div>
     <div class="stat-card"><div class="stat-val">${uniquePlayers}</div><div class="stat-lbl">Players</div></div>
-    <div class="stat-card"><div class="stat-val">₹${totalSpent}</div><div class="stat-lbl">Total Spent</div></div>
+    <div class="stat-card"><div class="stat-val">$${totalSpent}</div><div class="stat-lbl">Total Spent</div></div>
   </div>
   <div class="sh"><span class="sh-title">🏆 Leaderboard — ${fmtMonth(month)}</span></div>`;
 
@@ -1076,7 +1180,7 @@ function renderMonthly(month) {
     const isTop   = i === 0;
     const barPct  = Math.round(Math.abs(p.net) / maxAbsNet * 100);
     const barClr  = p.net > 0 ? '#27ae60' : p.net < 0 ? '#e74c3c' : '#555';
-    const netTxt  = `${p.net > 0 ? '+' : ''}₹${p.net}`;
+    const netTxt  = `${p.net > 0 ? '+' : ''}$${p.net}`;
     const netCls  = p.net > 0 ? 'pos' : p.net < 0 ? 'neg' : 'zero';
     const rankEl  = i < 3
       ? `<div class="lb-rank">${medals[i]}</div>`
@@ -1085,7 +1189,7 @@ function renderMonthly(month) {
       ${rankEl}
       <div class="lb-info">
         <div class="lb-name">${esc(p.name)}</div>
-        <div class="lb-sub">${p.games} game${p.games!==1?'s':''} · ${p.pots} pot${p.pots!==1?'s':''} · ₹${p.spent} spent</div>
+        <div class="lb-sub">${p.games} game${p.games!==1?'s':''} · ${p.pots} pot${p.pots!==1?'s':''} · $${p.spent} spent</div>
         <div class="lb-bar-wrap"><div class="lb-bar" style="width:${barPct}%;background:${barClr}"></div></div>
       </div>
       <div class="lb-net ${netCls}">${netTxt}</div>
@@ -1101,7 +1205,7 @@ function renderMonthly(month) {
         <div style="font-size:0.88rem;font-weight:500">${fmtDate(g.date)}</div>
         <span style="font-size:0.75rem;color:#9090cc">View →</span>
       </div>
-      <div class="ghc-info">${tp} pots · ₹${tp * g.rupeesPerPot} total${win ? ` · 🥇 ${esc(win.name)} (+₹${win.net})` : ''}</div>
+      <div class="ghc-info">${tp} pots · $${tp * g.dollarsPerPot} total${win ? ` · 🥇 ${esc(win.name)} (+$${win.net})` : ''}</div>
     </div>`;
   });
   document.getElementById('c-monthly').innerHTML = h;
@@ -1130,6 +1234,7 @@ function addPlayerToGame(playerId, playerName) {
   const gi = games.findIndex(g => g.id === S.gameId);
   if (gi === -1) return;
   if (games[gi].players.some(p => p.id === playerId)) { toast('Already in game', true); return; }
+  pushUndo(`Add ${playerName} to game`);
   games[gi].players.push({ id: playerId, name: playerName, pots: 1, cashedOut: false, finalChips: null });
   DB.games.set(games);
   closeModal('m-add-to-game');
@@ -1145,6 +1250,7 @@ function addGuestToGame() {
   const batches = DB.batches.get();
   const bi      = batches.findIndex(b => b.id === games[gi].batchId);
   const guestId = 'g' + uid();
+  pushUndo(`Add guest ${name} to game`);
   if (bi !== -1) batches[bi].members.push({ id: guestId, name, guest: true });
   games[gi].players.push({ id: guestId, name, pots: 1, cashedOut: false, finalChips: null });
   DB.batches.set(batches);
@@ -1165,7 +1271,7 @@ function openCashOut(playerId) {
   const invested = p.pots * g.chipsPerPot;
   document.getElementById('co-sub').textContent = `${p.name} is leaving. Enter their final chip count.`;
   document.getElementById('co-info').innerHTML =
-    `<div class="info-box">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · ₹${p.pots * g.rupeesPerPot} spent</div>`;
+    `<div class="info-box">${p.pots} pot${p.pots!==1?'s':''} · ${invested} chips invested · $${p.pots * g.dollarsPerPot} spent</div>`;
   document.getElementById('co-chips').value = '';
   openModal('m-cashout');
 }
@@ -1177,6 +1283,7 @@ function submitCashOut() {
   if (gi === -1) return;
   const pi = games[gi].players.findIndex(p => p.id === _cashOutPid);
   if (pi === -1) return;
+  pushUndo(`${games[gi].players[pi].name} cash out`);
   games[gi].players[pi].cashedOut   = true;
   games[gi].players[pi].finalChips  = chips;
   DB.games.set(games);

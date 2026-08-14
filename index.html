@@ -603,6 +603,7 @@ function renderBatch() {
         ${prevBal !== 0 ? `<div class="p-sub" style="color:${prevBal>0?'#27ae60':'#e74c3c'}">${prevBal>0?'+':''}$${prevBal} prev. balance</div>` : ''}
       </div>
       ${isAdmin && !isAdm ? `<button class="btn btn-sm ${hasAccess ? 'btn-danger' : 'btn-outline'}" onclick="${hasAccess ? 'revokeAccess' : 'grantAccess'}('${m.id}')" style="font-size:0.7rem;padding:4px 8px;margin-right:4px">${hasAccess ? 'Revoke' : '+ Access'}</button>` : ''}
+      ${isAdmin && !isAdm && !m.guest ? `<button class="btn btn-sm btn-outline" onclick="transferAdmin('${m.id}','${esc(m.name)}')" style="font-size:0.7rem;padding:4px 8px;margin-right:4px;border-color:#f0c040;color:#f0c040">👑 Transfer</button>` : ''}
       ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="openPrevBalance('${m.id}')" style="font-size:0.7rem;padding:4px 8px;margin-right:4px">$ Bal</button>` : ''}
       ${isAdmin && !isMe ? `<button class="btn btn-sm btn-danger btn-icon" onclick="removeMember('${m.id}')">×</button>` : ''}
     </div>`;
@@ -735,6 +736,17 @@ function revokeAccess(memberId) {
   DB.batches.set(batches);
   renderBatch();
   toast('Editor access revoked.');
+}
+function transferAdmin(memberId, memberName) {
+  if (!confirm(`Transfer admin to ${memberName}? You will become a regular member and lose admin controls.`)) return;
+  const batches = DB.batches.get();
+  const bi = batches.findIndex(b => b.id === S.batchId);
+  if (bi === -1) return;
+  batches[bi].adminId = memberId;
+  batches[bi].editors = (batches[bi].editors || []).filter(id => id !== memberId);
+  DB.batches.set(batches);
+  renderBatch();
+  toast(`${memberName} is now the admin.`);
 }
 
 function addRegistered(userId, userName) {

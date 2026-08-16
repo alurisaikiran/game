@@ -240,6 +240,7 @@
 <div id="s-dash" class="screen">
   <div class="top-bar">
     <h2>🃏 Poker Tracker</h2>
+    <button class="btn btn-sm btn-outline" onclick="openSettingsModal()" style="padding:6px 10px;font-size:0.9rem" title="Google Sheets settings">⚙</button>
     <button class="btn btn-sm btn-outline" onclick="doLogout()" style="padding:6px 12px;font-size:0.78rem">Sign out</button>
   </div>
   <div class="content" id="c-dash"></div>
@@ -387,6 +388,20 @@
     <div class="modal-row">
       <button class="btn btn-outline" onclick="closeModal('m-prev-balance')">Cancel</button>
       <button class="btn btn-primary" onclick="savePrevBalance()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Settings -->
+<div class="modal-bg" id="m-settings">
+  <div class="modal">
+    <div class="modal-title">⚙ Google Sheets Integration</div>
+    <div class="modal-sub">Paste your Google Apps Script web app URL below. Once saved and redeployed, all game events (rebuys with timestamps, results, batch details) will be logged automatically for everyone.</div>
+    <div id="settings-status" style="font-size:0.78rem;margin-bottom:12px"></div>
+    <div class="fg"><label>Apps Script Web App URL</label><input id="settings-url" type="url" placeholder="https://script.google.com/macros/s/..." /></div>
+    <div class="modal-row">
+      <button class="btn btn-outline" onclick="closeModal('m-settings')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSheetSettings()">Save</button>
     </div>
   </div>
 </div>
@@ -698,20 +713,24 @@ function addAllPlayers() {
   const bi      = batches.findIndex(b => b.id === S.batchId);
   if (bi === -1) return;
   let total = 0;
+  const newMembersLog = [];
   // Add checked registered users
   [...document.querySelectorAll('.reg-user-cb:checked')].forEach(cb => {
     if (!batches[bi].members.some(m => m.id === cb.value)) {
       batches[bi].members.push({ id: cb.value, name: cb.dataset.name, guest: false });
+      newMembersLog.push({ name: cb.dataset.name, type: 'Registered' });
       total++;
     }
   });
   // Add filled guest names
   [...document.querySelectorAll('.bulk-name')].map(i => i.value.trim()).filter(n => n).forEach(name => {
     batches[bi].members.push({ id: 'g' + uid(), name, guest: true });
+    newMembersLog.push({ name, type: 'Guest' });
     total++;
   });
   if (!total) { toast('Check users or enter guest names', true); return; }
   DB.batches.set(batches);
+  if (newMembersLog.length) sendToSheets('members_added', { batchName: batches[bi].name, members: newMembersLog, totalMembers: batches[bi].members.length });
   closeModal('m-add-member');
   renderBatch();
   toast(`${total} player${total !== 1 ? 's' : ''} added!`);
@@ -811,6 +830,8 @@ function startGame() {
   const players = checked.map(cb => ({ id: cb.value, name: cb.dataset.name, pots: 1 }));
   const game = { id: 'gm'+uid(), batchId: S.batchId, date, chipsPerPot: chips, dollarsPerPot: dollars, status: 'active', players, results: null, completedAt: null };
   games.push(game); DB.games.set(games);
+  const bForLog = DB.batches.get().find(x => x.id === S.batchId);
+  sendToSheets('game_started', { batchName: bForLog ? bForLog.name : '', gameDate: date, chipsPerPot: chips, dollarsPerPot: dollars, totalPlayers: players.length, playerNames: players.map(p => p.name).join(', '), players: players.map(p => ({ name: p.name })) });
   closeModal('m-start-game'); toast('Game started!');
   S.gameId = game.id; renderGame(); S.stack.push('s-game'); go('s-game', false);
 }
@@ -895,6 +916,8 @@ function addRebuy(playerId) {
   pushUndo(`${games[gi].players[pi].name} rebuy`);
   games[gi].players[pi].pots++;
   DB.games.set(games);
+  const bForRebuy = DB.batches.get().find(x => x.id === games[gi].batchId);
+  sendToSheets('rebuy', { batchName: bForRebuy ? bForRebuy.name : '', gameDate: games[gi].date, playerName: games[gi].players[pi].name, potNumber: games[gi].players[pi].pots, totalPotsForPlayer: games[gi].players[pi].pots, totalSpent: games[gi].players[pi].pots * games[gi].dollarsPerPot });
   const name = games[gi].players[pi].name;
   renderGame();
   toast(`${name} rebuys — now ${games[gi].players[pi].pots} pot${games[gi].players[pi].pots !== 1 ? 's' : ''} ($${games[gi].players[pi].pots * games[gi].dollarsPerPot} spent)`);
@@ -990,6 +1013,8 @@ function submitEndGame() {
 
   g.status = 'completed'; g.completedAt = new Date().toISOString();
   DB.games.set(games);
+  const bForEnd = DB.batches.get().find(x => x.id === g.batchId);
+  sendToSheets('game_ended', { batchName: bForEnd ? bForEnd.name : '', gameDate: g.date, chipsPerPot: g.chipsPerPot, dollarsPerPot: g.dollarsPerPot, totalPlayers: g.results.length, results: g.results.map((r, i) => ({ name: r.name, rank: i+1, pots: r.pots, spent: r.spent, finalChips: r.finalChips, net: r.net })) });
   closeModal('m-end-game');
   openResults(g.id);
 }
@@ -1249,6 +1274,8 @@ function addPlayerToGame(playerId, playerName) {
   pushUndo(`Add ${playerName} to game`);
   games[gi].players.push({ id: playerId, name: playerName, pots: 1, cashedOut: false, finalChips: null });
   DB.games.set(games);
+  const bForJoin = DB.batches.get().find(x => x.id === games[gi].batchId);
+  sendToSheets('player_joined_game', { batchName: bForJoin ? bForJoin.name : '', gameDate: games[gi].date, playerName, potNumber: 1, totalPotsForPlayer: 1, totalSpent: games[gi].dollarsPerPot });
   closeModal('m-add-to-game');
   renderGame();
   toast(`${playerName} added to game!`);
@@ -1267,6 +1294,8 @@ function addGuestToGame() {
   games[gi].players.push({ id: guestId, name, pots: 1, cashedOut: false, finalChips: null });
   DB.batches.set(batches);
   DB.games.set(games);
+  const bForGuest = DB.batches.get().find(x => x.id === games[gi].batchId);
+  sendToSheets('player_joined_game', { batchName: bForGuest ? bForGuest.name : '', gameDate: games[gi].date, playerName: name, potNumber: 1, totalPotsForPlayer: 1, totalSpent: games[gi].dollarsPerPot });
   closeModal('m-add-to-game');
   renderGame();
   toast(`${name} added to batch & game!`);
@@ -1334,7 +1363,33 @@ function createBatch() {
   if (!name) { toast('Enter a batch name', true); return; }
   const b = { id: 'b'+uid(), name, adminId: S.session.id, members: [{ id: S.session.id, name: S.session.name, guest: false }], editors: [], at: Date.now() };
   const batches = DB.batches.get(); batches.push(b); DB.batches.set(batches);
+  sendToSheets('batch_created', { batchName: name, adminName: S.session.name, totalMembers: 1 });
   closeModal('m-create-batch'); renderDash(); toast(`"${name}" created!`);
+}
+
+// ===== GOOGLE SHEETS =====
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzPNltGV2U4mBfNjTC5rJZyRgSx6JrGo439qxtM25bbZmxYD0kc7VBNdRdWBQzKTL3p/exec';
+function sendToSheets(eventType, data) {
+  const url = localStorage.getItem('pt_sheets_url') || SHEETS_URL;
+  if (!url) return;
+  try {
+    fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ event: eventType, ts: new Date().toISOString(), ...data }) });
+  } catch(e) {}
+}
+function openSettingsModal() {
+  document.getElementById('settings-url').value = localStorage.getItem('pt_sheets_url') || SHEETS_URL || '';
+  const connected = !!(localStorage.getItem('pt_sheets_url') || SHEETS_URL);
+  document.getElementById('settings-status').innerHTML = connected
+    ? '<span style="color:#27ae60">✓ Connected to Google Sheets</span>'
+    : '<span style="color:#888">Not connected — paste your Apps Script URL below</span>';
+  openModal('m-settings');
+}
+function saveSheetSettings() {
+  const url = document.getElementById('settings-url').value.trim();
+  if (url && !url.includes('script.google.com')) { toast('Must be a Google Apps Script URL', true); return; }
+  if (url) { localStorage.setItem('pt_sheets_url', url); toast('Google Sheets connected!'); }
+  else { localStorage.removeItem('pt_sheets_url'); toast('Disconnected.'); }
+  closeModal('m-settings');
 }
 
 // ===== INIT =====
